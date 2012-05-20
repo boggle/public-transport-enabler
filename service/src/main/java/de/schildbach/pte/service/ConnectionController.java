@@ -48,11 +48,15 @@ public class ConnectionController
 			@RequestParam(value = "fromId", required = false, defaultValue = "0") final int fromId,
 			@RequestParam(value = "toType", required = false, defaultValue = "ANY") final LocationType toType,
 			@RequestParam(value = "to", required = false) final String to,
-			@RequestParam(value = "toId", required = false, defaultValue = "0") final int toId) throws IOException
+			@RequestParam(value = "toId", required = false, defaultValue = "0") final int toId,
+            @RequestParam(value = "num", required = false, defaultValue = "5") final int num) throws IOException
 	{
 		final Location fromLocation = new Location(fromType, fromId, null, from);
+        final Location midLocation = null;
 		final Location toLocation = new Location(toType, toId, null, to);
 		final String products = "IRSUTBFC";
-		return provider.queryConnections(fromLocation, null, toLocation, new Date(), true, products, WalkSpeed.NORMAL, Accessibility.NEUTRAL);
+        final Date date = new Date();
+        final boolean flag = true;
+		return provider.queryConnections(fromLocation, midLocation, toLocation, date, flag, num, products, WalkSpeed.NORMAL, Accessibility.NEUTRAL);
 	}
 }

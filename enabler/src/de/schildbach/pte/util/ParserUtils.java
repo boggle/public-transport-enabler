@@ -278,7 +278,8 @@ public final class ParserUtils
 				else if (namedEntity.equals("apos"))
 					c = '\'';
 				else if (namedEntity.equals("szlig"))
-					c = 'ß';
+                    // TODO unicode szlig literal as char goes here; took out to avoid mac encoding problems
+					c = 'b';
 				else if (namedEntity.equals("nbsp"))
 					c = ' ';
 				else
