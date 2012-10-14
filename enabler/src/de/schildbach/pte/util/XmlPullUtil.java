@@ -107,6 +107,15 @@ public final class XmlPullUtil
 		return Integer.parseInt(pp.getAttributeValue(null, attrName).trim());
 	}
 
+	public static int optIntAttr(final XmlPullParser pp, final String attrName, final int defaultValue)
+	{
+		final String attr = pp.getAttributeValue(null, attrName);
+		if (attr != null)
+			return Integer.parseInt(attr.trim());
+		else
+			return defaultValue;
+	}
+
 	public static float floatAttr(final XmlPullParser pp, final String attrName)
 	{
 		return Float.parseFloat(pp.getAttributeValue(null, attrName).trim());
@@ -292,7 +301,15 @@ public final class XmlPullUtil
 			throw new XmlPullParserException("name for element can not be null");
 
 		pp.require(XmlPullParser.START_TAG, namespace, name);
-		return pp.nextText();
+		final String text = pp.nextText();
+
+		// work around http://code.google.com/p/android/issues/detail?id=21425
+		if (pp.getEventType() != XmlPullParser.END_TAG)
+			pp.nextTag();
+
+		pp.require(XmlPullParser.END_TAG, namespace, name);
+
+		return text;
 	}
 
 	/**

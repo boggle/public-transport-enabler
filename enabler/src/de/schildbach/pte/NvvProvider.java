@@ -35,7 +35,7 @@ public class NvvProvider extends AbstractHafasProvider
 
 	public NvvProvider()
 	{
-		super(API_BASE + "query.exe/dn", 17, null, "UTF-8", "UTF-8");
+		super(API_BASE + "query.exe/dn", 17, null, UTF_8, UTF_8);
 	}
 
 	public NetworkId id()
@@ -43,7 +43,7 @@ public class NvvProvider extends AbstractHafasProvider
 		return NETWORK_ID;
 	}
 
-	public boolean hasCapabilities(Capability... capabilities)
+	public boolean hasCapabilities(final Capability... capabilities)
 	{
 		for (final Capability capability : capabilities)
 			if (capability == Capability.AUTOCOMPLETE_ONE_LINE || capability == Capability.CONNECTIONS)
@@ -153,8 +153,7 @@ public class NvvProvider extends AbstractHafasProvider
 		uri.append("&L=vs_java3");
 		uri.append("&input=").append(stationId);
 
-		throw new UnsupportedOperationException();
-		// return xmlQueryDepartures(uri.toString(), stationId);
+		return xmlQueryDepartures(uri.toString(), stationId);
 	}
 
 	public List<Location> autocompleteStations(final CharSequence constraint) throws IOException
@@ -165,6 +164,14 @@ public class NvvProvider extends AbstractHafasProvider
 	@Override
 	protected char normalizeType(final String type)
 	{
+		final String ucType = type.toUpperCase();
+
+		if ("U-BAHN".equals(ucType))
+			return 'U';
+
+		if ("LTAXI".equals(ucType))
+			return 'B';
+
 		final char t = super.normalizeType(type);
 		if (t != 0)
 			return t;

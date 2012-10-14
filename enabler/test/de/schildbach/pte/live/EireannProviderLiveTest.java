@@ -22,9 +22,9 @@ import java.util.List;
 
 import org.junit.Test;
 
+import de.schildbach.pte.EireannProvider;
 import de.schildbach.pte.NetworkProvider.Accessibility;
 import de.schildbach.pte.NetworkProvider.WalkSpeed;
-import de.schildbach.pte.SeptaProvider;
 import de.schildbach.pte.dto.Location;
 import de.schildbach.pte.dto.LocationType;
 import de.schildbach.pte.dto.NearbyStationsResult;
@@ -34,25 +34,25 @@ import de.schildbach.pte.dto.QueryDeparturesResult;
 /**
  * @author Andreas Schildbach
  */
-public class SeptaProviderLiveTest extends AbstractProviderLiveTest
+public class EireannProviderLiveTest extends AbstractProviderLiveTest
 {
-	public SeptaProviderLiveTest()
+	public EireannProviderLiveTest()
 	{
-		super(new SeptaProvider());
+		super(new EireannProvider());
 	}
 
 	@Test
 	public void nearbyStations() throws Exception
 	{
-		final NearbyStationsResult result = provider.queryNearbyStations(new Location(LocationType.STATION, 2090227), 0, 0);
+		final NearbyStationsResult result = provider.queryNearbyStations(new Location(LocationType.STATION, 8013500), 0, 0);
 
-		print(result);
+		System.out.println(result.status + "  " + result.stations.size() + "  " + result.stations);
 	}
 
 	@Test
 	public void nearbyStationsByCoordinate() throws Exception
 	{
-		final NearbyStationsResult result = provider.queryNearbyStations(new Location(LocationType.ADDRESS, 39954122, -75161705), 0, 0);
+		final NearbyStationsResult result = provider.queryNearbyStations(new Location(LocationType.ADDRESS, 53343993, -6267371), 0, 0);
 
 		print(result);
 	}
@@ -60,7 +60,7 @@ public class SeptaProviderLiveTest extends AbstractProviderLiveTest
 	@Test
 	public void queryDepartures() throws Exception
 	{
-		final QueryDeparturesResult result = provider.queryDepartures(2090227, 0, false);
+		final QueryDeparturesResult result = provider.queryDepartures(8013500, 0, false);
 
 		print(result);
 	}
@@ -68,7 +68,23 @@ public class SeptaProviderLiveTest extends AbstractProviderLiveTest
 	@Test
 	public void autocomplete() throws Exception
 	{
-		final List<Location> autocompletes = provider.autocompleteStations("Airport");
+		final List<Location> autocompletes = provider.autocompleteStations("Dublin");
+
+		print(autocompletes);
+	}
+
+	@Test
+	public void autocompleteUmlaut() throws Exception
+	{
+		final List<Location> autocompletes = provider.autocompleteStations("Busáras");
+
+		print(autocompletes);
+	}
+
+	@Test
+	public void autocompleteAddress() throws Exception
+	{
+		final List<Location> autocompletes = provider.autocompleteStations("Dorfstrasse 10, Dällikon, Schweiz");
 
 		print(autocompletes);
 	}
@@ -76,20 +92,9 @@ public class SeptaProviderLiveTest extends AbstractProviderLiveTest
 	@Test
 	public void shortConnection() throws Exception
 	{
-		final QueryConnectionsResult result = queryConnections(new Location(LocationType.STATION, 1021532, null, "30th St Station"), null,
-				new Location(LocationType.STATION, 1001392, null, "15th St Station"), new Date(), true, ALL_PRODUCTS, WalkSpeed.NORMAL,
+		final QueryConnectionsResult result = queryConnections(new Location(LocationType.STATION, 8052281, null, "Dublin Rd (GMIT)"), null,
+				new Location(LocationType.STATION, 8013100, null, "Dublin Airport (Atrium Road)"), new Date(), true, ALL_PRODUCTS, WalkSpeed.NORMAL,
 				Accessibility.NEUTRAL);
-		System.out.println(result);
-		final QueryConnectionsResult laterResult = queryMoreConnections(result.context, true);
-		System.out.println(laterResult);
-	}
-
-	@Test
-	public void addressConnection() throws Exception
-	{
-		final QueryConnectionsResult result = queryConnections(new Location(LocationType.ADDRESS, 0, 40015670, -75209400, "Philadelphia 19127",
-				"3601 Main St"), null, new Location(LocationType.STATION, 2090227, null, "Main Street"), new Date(), true, ALL_PRODUCTS,
-				WalkSpeed.NORMAL, Accessibility.NEUTRAL);
 		System.out.println(result);
 		final QueryConnectionsResult laterResult = queryMoreConnections(result.context, true);
 		System.out.println(laterResult);

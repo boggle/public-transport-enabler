@@ -35,6 +35,8 @@ public class TlswProvider extends AbstractEfaProvider
 	public TlswProvider()
 	{
 		super(API_BASE, null);
+
+		setUseRouteIndexAsConnectionId(false);
 	}
 
 	public NetworkId id()
@@ -48,7 +50,7 @@ public class TlswProvider extends AbstractEfaProvider
 		return TimeZone.getTimeZone("Europe/London");
 	}
 
-	public boolean hasCapabilities(Capability... capabilities)
+	public boolean hasCapabilities(final Capability... capabilities)
 	{
 		for (final Capability capability : capabilities)
 			if (capability == Capability.AUTOCOMPLETE_ONE_LINE || capability == Capability.DEPARTURES || capability == Capability.CONNECTIONS)

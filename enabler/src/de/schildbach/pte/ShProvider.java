@@ -50,7 +50,7 @@ public class ShProvider extends AbstractHafasProvider
 
 	public ShProvider()
 	{
-		super(API_BASE + "query.exe/dn", 10, null, null, "UTF-8");
+		super(API_BASE + "query.exe/dn", 10, null, null, UTF_8);
 	}
 
 	public NetworkId id()
@@ -261,6 +261,9 @@ public class ShProvider extends AbstractHafasProvider
 	protected char normalizeType(final String type)
 	{
 		final String ucType = type.toUpperCase();
+
+		if ("DPF".equals(ucType)) // Hamburg-Koeln-Express
+			return 'I';
 
 		if ("KBS".equals(ucType))
 			return 'B';

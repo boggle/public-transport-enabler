@@ -39,7 +39,7 @@ public class SeProvider extends AbstractHafasProvider
 
 	public SeProvider()
 	{
-		super(API_BASE + "query.exe/sn", 14, null, "UTF-8", null);
+		super(API_BASE + "query.exe/sn", 14, null, UTF_8, null);
 	}
 
 	public NetworkId id()
@@ -191,11 +191,10 @@ public class SeProvider extends AbstractHafasProvider
 
 	private static final String AUTOCOMPLETE_URI = API_BASE
 			+ "ajax-getstop.exe/sny?start=1&tpl=suggest2json&REQ0JourneyStopsS0A=7&getstop=1&noSession=yes&REQ0JourneyStopsB=12&REQ0JourneyStopsS0G=&S=%s";
-	private static final String ENCODING = "ISO-8859-1";
 
 	public List<Location> autocompleteStations(final CharSequence constraint) throws IOException
 	{
-		final String uri = String.format(AUTOCOMPLETE_URI, ParserUtils.urlEncode(constraint.toString(), ENCODING));
+		final String uri = String.format(AUTOCOMPLETE_URI, ParserUtils.urlEncode(constraint.toString(), ISO_8859_1));
 
 		return jsonGetStops(uri);
 	}
@@ -208,12 +207,12 @@ public class SeProvider extends AbstractHafasProvider
 	{
 		final Matcher mBus = P_NORMALIZE_LINE_BUS.matcher(line);
 		if (mBus.matches())
-			return newLine('B' + mBus.group(1));
+			return newLine('B', mBus.group(1));
 
 		final Matcher mSubway = P_NORMALIZE_LINE_SUBWAY.matcher(line);
 		if (mSubway.matches())
-			return newLine("UT" + mSubway.group(1));
+			return newLine('U', "T" + mSubway.group(1));
 
-		return newLine('?' + line);
+		return newLine('?', line);
 	}
 }

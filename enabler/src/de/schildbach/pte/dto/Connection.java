@@ -29,24 +29,24 @@ public final class Connection implements Serializable
 {
 	private static final long serialVersionUID = 2508466068307110312L;
 
-	public final String id;
-	public final String link;
+	private String id;
 	public final Location from;
 	public final Location to;
 	public final List<Part> parts;
 	public final List<Fare> fares;
 	public final int[] capacity;
+	public final Integer numChanges;
 
-	public Connection(final String id, final String link, final Location from, final Location to, final List<Part> parts, final List<Fare> fares,
-			final int[] capacity)
+	public Connection(final String id, final Location from, final Location to, final List<Part> parts, final List<Fare> fares, final int[] capacity,
+			final Integer numChanges)
 	{
 		this.id = id;
-		this.link = link;
 		this.from = from;
 		this.to = to;
 		this.parts = parts;
 		this.fares = fares;
 		this.capacity = capacity;
+		this.numChanges = numChanges;
 	}
 
 	public Date getFirstDepartureTime()
@@ -127,18 +127,59 @@ public final class Connection implements Serializable
 			return null;
 	}
 
+	public String getId()
+	{
+		if (id == null)
+			id = buildSubstituteId();
+
+		return id;
+	}
+
+	private String buildSubstituteId()
+	{
+		final StringBuilder builder = new StringBuilder();
+
+		if (parts != null && parts.size() > 0)
+		{
+			for (final Part part : parts)
+			{
+				builder.append(part.departure.hasId() ? part.departure.id : part.departure.lat + '/' + part.departure.lon).append('-');
+				builder.append(part.arrival.hasId() ? part.arrival.id : part.arrival.lat + '/' + part.arrival.lon).append('-');
+
+				if (part instanceof Footway)
+				{
+					builder.append(((Footway) part).min);
+				}
+				else if (part instanceof Trip)
+				{
+					final Trip trip = (Trip) part;
+					builder.append(trip.departureTime.getTime()).append('-');
+					builder.append(trip.arrivalTime.getTime()).append('-');
+					builder.append(trip.line.label);
+				}
+
+				builder.append('|');
+			}
+
+			builder.setLength(builder.length() - 1);
+		}
+
+		return builder.toString();
+	}
+
 	@Override
 	public String toString()
 	{
 		final SimpleDateFormat FORMAT = new SimpleDateFormat("E HH:mm");
 
-		final StringBuilder str = new StringBuilder(id);
+		final StringBuilder str = new StringBuilder(getId());
 		str.append(' ');
 		final Date firstTripDepartureTime = getFirstTripDepartureTime();
 		str.append(firstTripDepartureTime != null ? FORMAT.format(firstTripDepartureTime) : "null");
 		str.append('-');
 		final Date lastTripArrivalTime = getLastTripArrivalTime();
 		str.append(lastTripArrivalTime != null ? FORMAT.format(lastTripArrivalTime) : "null");
+		str.append(' ').append(numChanges).append("ch");
 
 		return str.toString();
 	}
@@ -151,13 +192,13 @@ public final class Connection implements Serializable
 		if (!(o instanceof Connection))
 			return false;
 		final Connection other = (Connection) o;
-		return id.equals(other.id);
+		return getId().equals(other.getId());
 	}
 
 	@Override
 	public int hashCode()
 	{
-		return id.hashCode();
+		return getId().hashCode();
 	}
 
 	public static class Part implements Serializable
@@ -184,15 +225,18 @@ public final class Connection implements Serializable
 		public final Location destination;
 		public final Date departureTime; // TODO rename to plannedDepartureTime
 		public final Date predictedDepartureTime;
-		public final String departurePosition;
+		public final String departurePosition; // TODO rename to plannedDeparturePosition
+		public final String predictedDeparturePosition;
 		public final Date arrivalTime; // TODO rename to plannedArrivalTime
 		public final Date predictedArrivalTime;
-		public final String arrivalPosition;
+		public final String arrivalPosition; // TODO rename to plannedArrivalPosition
+		public final String predictedArrivalPosition;
 		public final List<Stop> intermediateStops;
 
 		public Trip(final Line line, final Location destination, final Date plannedDepartureTime, final Date predictedDepartureTime,
-				final String departurePosition, final Location departure, final Date plannedArrivalTime, final Date predictedArrivalTime,
-				final String arrivalPosition, final Location arrival, final List<Stop> intermediateStops, final List<Point> path)
+				final String departurePosition, final String predictedDeparturePosition, final Location departure, final Date plannedArrivalTime,
+				final Date predictedArrivalTime, final String arrivalPosition, final String predictedArrivalPosition, final Location arrival,
+				final List<Stop> intermediateStops, final List<Point> path)
 		{
 			super(departure, arrival, path);
 
@@ -201,9 +245,11 @@ public final class Connection implements Serializable
 			this.departureTime = plannedDepartureTime;
 			this.predictedDepartureTime = predictedDepartureTime;
 			this.departurePosition = departurePosition;
+			this.predictedDeparturePosition = predictedDeparturePosition;
 			this.arrivalTime = plannedArrivalTime;
 			this.predictedArrivalTime = predictedArrivalTime;
 			this.arrivalPosition = arrivalPosition;
+			this.predictedArrivalPosition = predictedArrivalPosition;
 			this.intermediateStops = intermediateStops;
 		}
 
@@ -222,6 +268,29 @@ public final class Connection implements Serializable
 			return predictedDepartureTime != null;
 		}
 
+		public Long getDepartureDelay()
+		{
+			if (departureTime != null && predictedDepartureTime != null)
+				return predictedDepartureTime.getTime() - departureTime.getTime();
+			else
+				return null;
+		}
+
+		public String getDeparturePosition()
+		{
+			if (predictedDeparturePosition != null)
+				return predictedDeparturePosition;
+			else if (departurePosition != null)
+				return departurePosition;
+			else
+				return null;
+		}
+
+		public boolean isDeparturePositionPredicted()
+		{
+			return predictedDeparturePosition != null;
+		}
+
 		public Date getArrivalTime()
 		{
 			if (predictedArrivalTime != null)
@@ -235,6 +304,29 @@ public final class Connection implements Serializable
 		public boolean isArrivalTimePredicted()
 		{
 			return predictedArrivalTime != null;
+		}
+
+		public Long getArrivalDelay()
+		{
+			if (arrivalTime != null && predictedArrivalTime != null)
+				return predictedArrivalTime.getTime() - arrivalTime.getTime();
+			else
+				return null;
+		}
+
+		public String getArrivalPosition()
+		{
+			if (predictedArrivalPosition != null)
+				return predictedArrivalPosition;
+			else if (arrivalPosition != null)
+				return arrivalPosition;
+			else
+				return null;
+		}
+
+		public boolean isArrivalPositionPredicted()
+		{
+			return predictedArrivalPosition != null;
 		}
 
 		@Override
@@ -258,13 +350,20 @@ public final class Connection implements Serializable
 
 	public final static class Footway extends Part
 	{
-		public final int min;
+		private static final long serialVersionUID = -6651381862837233925L;
 
-		public Footway(final int min, final Location departure, final Location arrival, final List<Point> path)
+		public final int min;
+		public final int distance;
+		public final boolean transfer;
+
+		public Footway(final int min, final int distance, final boolean transfer, final Location departure, final Location arrival,
+				final List<Point> path)
 		{
 			super(departure, arrival, path);
 
 			this.min = min;
+			this.distance = distance;
+			this.transfer = transfer;
 		}
 
 		@Override
@@ -272,6 +371,10 @@ public final class Connection implements Serializable
 		{
 			final StringBuilder builder = new StringBuilder(getClass().getName() + "[");
 			builder.append("min=").append(min);
+			builder.append(",");
+			builder.append("distance=").append(distance);
+			builder.append(",");
+			builder.append("transfer=").append(transfer);
 			builder.append(",");
 			builder.append("departure=").append(departure.toDebugString());
 			builder.append(",");

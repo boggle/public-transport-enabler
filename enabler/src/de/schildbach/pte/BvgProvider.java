@@ -19,21 +19,17 @@ package de.schildbach.pte;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import de.schildbach.pte.dto.Connection;
 import de.schildbach.pte.dto.Departure;
-import de.schildbach.pte.dto.GetConnectionDetailsResult;
 import de.schildbach.pte.dto.Line;
 import de.schildbach.pte.dto.Line.Attr;
 import de.schildbach.pte.dto.Location;
@@ -45,10 +41,8 @@ import de.schildbach.pte.dto.QueryConnectionsResult;
 import de.schildbach.pte.dto.QueryDeparturesResult;
 import de.schildbach.pte.dto.ResultHeader;
 import de.schildbach.pte.dto.StationDepartures;
-import de.schildbach.pte.dto.Stop;
 import de.schildbach.pte.dto.Style;
 import de.schildbach.pte.dto.Style.Shape;
-import de.schildbach.pte.exception.SessionExpiredException;
 import de.schildbach.pte.exception.UnexpectedRedirectException;
 import de.schildbach.pte.geo.Berlin;
 import de.schildbach.pte.util.ParserUtils;
@@ -59,34 +53,12 @@ import de.schildbach.pte.util.ParserUtils;
 public final class BvgProvider extends AbstractHafasProvider
 {
 	public static final NetworkId NETWORK_ID = NetworkId.BVG;
-	private static final String BASE_URL = "http://mobil.bvg.de";
-	private static final String API_BASE = BASE_URL + "/Fahrinfo/bin/";
+	private static final String API_BASE = "http://www.fahrinfo-berlin.de/Fahrinfo/bin/";
+	private static final String DEPARTURE_URL = "http://mobil.bvg.de";
 
 	private static final long PARSER_DAY_ROLLOVER_THRESHOLD_MS = 12 * 60 * 60 * 1000;
 
 	private final String additionalQueryParameter;
-
-	private static class Context implements QueryConnectionsContext
-	{
-		private final String linkLater;
-		private final String linkEarlier;
-
-		private Context(final String linkLater, final String linkEarlier)
-		{
-			this.linkLater = linkLater;
-			this.linkEarlier = linkEarlier;
-		}
-
-		public boolean canQueryLater()
-		{
-			return linkLater != null;
-		}
-
-		public boolean canQueryEarlier()
-		{
-			return linkEarlier != null;
-		}
-	}
 
 	public BvgProvider(final String additionalQueryParameter)
 	{
@@ -110,9 +82,70 @@ public final class BvgProvider extends AbstractHafasProvider
 	}
 
 	@Override
+	protected char intToProduct(final int value)
+	{
+		if (value == 1)
+			return 'S';
+		if (value == 2)
+			return 'U';
+		if (value == 4)
+			return 'T';
+		if (value == 8)
+			return 'B';
+		if (value == 16)
+			return 'F';
+		if (value == 32)
+			return 'I';
+		if (value == 64)
+			return 'R';
+		if (value == 128)
+			return 'P';
+
+		throw new IllegalArgumentException("cannot handle: " + value);
+	}
+
+	@Override
 	protected void setProductBits(final StringBuilder productBits, final char product)
 	{
-		throw new UnsupportedOperationException();
+		if (product == 'I')
+		{
+			productBits.setCharAt(5, '1');
+		}
+		else if (product == 'R')
+		{
+			productBits.setCharAt(6, '1');
+		}
+		else if (product == 'S')
+		{
+			productBits.setCharAt(0, '1');
+		}
+		else if (product == 'U')
+		{
+			productBits.setCharAt(1, '1');
+		}
+		else if (product == 'T')
+		{
+			productBits.setCharAt(2, '1');
+		}
+		else if (product == 'B')
+		{
+			productBits.setCharAt(3, '1');
+		}
+		else if (product == 'P')
+		{
+			productBits.setCharAt(7, '1');
+		}
+		else if (product == 'F')
+		{
+			productBits.setCharAt(4, '1');
+		}
+		else if (product == 'C')
+		{
+		}
+		else
+		{
+			throw new IllegalArgumentException("cannot handle: " + product);
+		}
 	}
 
 	private static final Pattern P_SPLIT_NAME_PAREN = Pattern.compile("(.*?) \\((.{4,}?)\\)(?: \\((U|S|S\\+U)\\))?");
@@ -169,7 +202,7 @@ public final class BvgProvider extends AbstractHafasProvider
 				final int parsedId = Integer.parseInt(mOwn.group(1));
 				final int parsedLon = (int) (Float.parseFloat(mOwn.group(2)) * 1E6);
 				final int parsedLat = (int) (Float.parseFloat(mOwn.group(3)) * 1E6);
-				final String[] parsedPlaceAndName = splitPlaceAndName(ParserUtils.urlDecode(mOwn.group(4), "ISO-8859-1"));
+				final String[] parsedPlaceAndName = splitPlaceAndName(ParserUtils.urlDecode(mOwn.group(4), ISO_8859_1));
 				stations.add(new Location(LocationType.STATION, parsedId, parsedLat, parsedLon, parsedPlaceAndName[0], parsedPlaceAndName[1]));
 			}
 
@@ -212,7 +245,7 @@ public final class BvgProvider extends AbstractHafasProvider
 		}
 	}
 
-	private static final String DEPARTURE_URL_LIVE = BASE_URL + "/IstAbfahrtzeiten/index/mobil?";
+	private static final String DEPARTURE_URL_LIVE = DEPARTURE_URL + "/IstAbfahrtzeiten/index/mobil?";
 
 	private String departuresQueryLiveUri(final int stationId)
 	{
@@ -224,13 +257,13 @@ public final class BvgProvider extends AbstractHafasProvider
 		return uri.toString();
 	}
 
-	private static final String DEPARTURE_URL_PLAN = API_BASE + "stboard.bin/dox/dox?boardType=dep&disableEquivs=yes&start=yes&";
+	private static final String DEPARTURE_URL_PLAN = DEPARTURE_URL + "/Fahrinfo/bin/stboard.bin/dox?boardType=dep&disableEquivs=yes&start=yes";
 
 	private String departuresQueryPlanUri(final int stationId, final int maxDepartures)
 	{
 		final StringBuilder uri = new StringBuilder();
 		uri.append(DEPARTURE_URL_PLAN);
-		uri.append("input=").append(stationId);
+		uri.append("&input=").append(stationId);
 		uri.append("&maxJourneys=").append(maxDepartures != 0 ? maxDepartures : 50);
 		if (additionalQueryParameter != null)
 			uri.append('&').append(additionalQueryParameter);
@@ -315,7 +348,10 @@ public final class BvgProvider extends AbstractHafasProvider
 					final Matcher mMsgsFine = P_DEPARTURES_LIVE_MSGS_FINE.matcher(mMsgsCoarse.group(1));
 					if (mMsgsFine.matches())
 					{
-						final Line line = parseLineWithoutType(ParserUtils.resolveEntities(mMsgsFine.group(1)));
+						final String lineName = ParserUtils.resolveEntities(mMsgsFine.group(1));
+						final char linePproduct = normalizeType(categoryFromName(lineName));
+						final Line line = newLine(linePproduct, normalizeLineName(lineName));
+
 						final String message = ParserUtils.resolveEntities(mMsgsFine.group(3)).replace('\n', ' ');
 						messages.put(line.label, message);
 					}
@@ -349,7 +385,9 @@ public final class BvgProvider extends AbstractHafasProvider
 						else
 							plannedTime = parsedTime.getTime();
 
-						final Line line = parseLineWithoutType(ParserUtils.resolveEntities(mDepFine.group(3)));
+						final String lineName = ParserUtils.resolveEntities(mDepFine.group(3));
+						final char lineProduct = normalizeType(categoryFromName(lineName));
+						final Line line = newLine(lineProduct, normalizeLineName(lineName));
 
 						final String position = null;
 
@@ -419,7 +457,9 @@ public final class BvgProvider extends AbstractHafasProvider
 
 						final Date plannedTime = parsedTime.getTime();
 
-						final Line line = parseLineWithoutType(ParserUtils.resolveEntities(mDepFine.group(2)));
+						final String lineName = ParserUtils.resolveEntities(mDepFine.group(2));
+						final char lineProduct = normalizeType(categoryFromName(lineName));
+						final Line line = newLine(lineProduct, normalizeLineName(lineName));
 
 						final String position = ParserUtils.resolveEntities(mDepFine.group(3));
 
@@ -449,459 +489,6 @@ public final class BvgProvider extends AbstractHafasProvider
 		}
 	}
 
-	public List<Location> autocompleteStations(final CharSequence constraint) throws IOException
-	{
-		return xmlMLcReq(constraint);
-	}
-
-	private static final String URL_ENCODING = "ISO-8859-1";
-
-	private String connectionsQueryUri(final Location from, final Location via, final Location to, final Date date, final boolean dep,
-			final String products)
-	{
-		final Calendar c = new GregorianCalendar(timeZone());
-		c.setTime(date);
-
-		final StringBuilder uri = new StringBuilder();
-
-		uri.append(API_BASE).append("query.bin/dn");
-
-		uri.append("?start=Suchen");
-
-		uri.append("&REQ0JourneyStopsS0ID=").append(ParserUtils.urlEncode(locationId(from), URL_ENCODING));
-		uri.append("&REQ0JourneyStopsZ0ID=").append(ParserUtils.urlEncode(locationId(to), URL_ENCODING));
-
-		if (via != null)
-		{
-			// workaround, for there does not seem to be a REQ0JourneyStops1.0ID parameter
-
-			uri.append("&REQ0JourneyStops1.0A=").append(locationType(via));
-
-			if (via.type == LocationType.STATION && via.hasId() && isValidStationId(via.id))
-			{
-				uri.append("&REQ0JourneyStops1.0L=").append(via.id);
-			}
-			else if (via.hasLocation())
-			{
-				uri.append("&REQ0JourneyStops1.0X=").append(via.lon);
-				uri.append("&REQ0JourneyStops1.0Y=").append(via.lat);
-				if (via.name == null)
-					uri.append("&REQ0JourneyStops1.0O=").append(
-							ParserUtils.urlEncode(String.format(Locale.ENGLISH, "%.6f, %.6f", via.lat / 1E6, via.lon / 1E6), URL_ENCODING));
-			}
-			else if (via.name != null)
-			{
-				uri.append("&REQ0JourneyStops1.0G=").append(ParserUtils.urlEncode(via.name, URL_ENCODING));
-				if (via.type != LocationType.ANY)
-					uri.append('!');
-			}
-		}
-
-		uri.append("&REQ0HafasSearchForw=").append(dep ? "1" : "0");
-		uri.append("&REQ0JourneyDate=").append(
-				String.format("%02d.%02d.%02d", c.get(Calendar.DAY_OF_MONTH), c.get(Calendar.MONTH) + 1, c.get(Calendar.YEAR) - 2000));
-		uri.append("&REQ0JourneyTime=").append(String.format("%02d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE)));
-
-		for (final char p : products.toCharArray())
-		{
-			if (p == 'I')
-			{
-				uri.append("&REQ0JourneyProduct_prod_section_0_5=1");
-				if (via != null)
-					uri.append("&REQ0JourneyProduct_prod_section_1_5=1");
-			}
-			if (p == 'R')
-			{
-				uri.append("&REQ0JourneyProduct_prod_section_0_6=1");
-				if (via != null)
-					uri.append("&REQ0JourneyProduct_prod_section_1_6=1");
-			}
-			if (p == 'S')
-			{
-				uri.append("&REQ0JourneyProduct_prod_section_0_0=1");
-				if (via != null)
-					uri.append("&REQ0JourneyProduct_prod_section_1_0=1");
-			}
-			if (p == 'U')
-			{
-				uri.append("&REQ0JourneyProduct_prod_section_0_1=1");
-				if (via != null)
-					uri.append("&REQ0JourneyProduct_prod_section_1_1=1");
-			}
-			if (p == 'T')
-			{
-				uri.append("&REQ0JourneyProduct_prod_section_0_2=1");
-				if (via != null)
-					uri.append("&REQ0JourneyProduct_prod_section_1_2=1");
-			}
-			if (p == 'B')
-			{
-				uri.append("&REQ0JourneyProduct_prod_section_0_3=1");
-				if (via != null)
-					uri.append("&REQ0JourneyProduct_prod_section_1_3=1");
-			}
-			if (p == 'P')
-			{
-				uri.append("&REQ0JourneyProduct_prod_section_0_7=1");
-				if (via != null)
-					uri.append("&REQ0JourneyProduct_prod_section_1_7=1");
-			}
-			if (p == 'F')
-			{
-				uri.append("&REQ0JourneyProduct_prod_section_0_4=1");
-				if (via != null)
-					uri.append("&REQ0JourneyProduct_prod_section_1_4=1");
-			}
-		}
-
-		if (additionalQueryParameter != null)
-			uri.append('&').append(additionalQueryParameter);
-
-		return uri.toString();
-	}
-
-	@Override
-	protected boolean isValidStationId(int id)
-	{
-		return id >= 1000000;
-	}
-
-	private static final Pattern P_PRE_ADDRESS = Pattern.compile(
-			"<select[^>]*name=\"(REQ0JourneyStopsS0K|REQ0JourneyStopsZ0K|REQ0JourneyStops1\\.0K)\"[^>]*>\n(.*?)</select>", Pattern.DOTALL);
-	private static final Pattern P_ADDRESSES = Pattern.compile("<option[^>]*>\\s*(.*?)\\s*(?:\\[([^\\]]*)\\]\\s*)?</option>", Pattern.DOTALL);
-
-	@Override
-	public QueryConnectionsResult queryConnections(final Location from, final Location via, final Location to, final Date date, final boolean dep,
-			final int numConnections, final String products, final WalkSpeed walkSpeed, final Accessibility accessibility) throws IOException
-	{
-		final String uri = connectionsQueryUri(from, via, to, date, dep, products);
-		final CharSequence page = ParserUtils.scrape(uri);
-
-		List<Location> fromAddresses = null;
-		List<Location> viaAddresses = null;
-		List<Location> toAddresses = null;
-
-		final Matcher mPreAddress = P_PRE_ADDRESS.matcher(page);
-		while (mPreAddress.find())
-		{
-			final String optionsType = mPreAddress.group(1);
-			final String options = mPreAddress.group(2);
-
-			final Matcher mAddresses = P_ADDRESSES.matcher(options);
-			final List<Location> addresses = new ArrayList<Location>();
-			while (mAddresses.find())
-			{
-				final String name = ParserUtils.resolveEntities(mAddresses.group(1)).trim();
-				final String typeStr = ParserUtils.resolveEntities(mAddresses.group(2));
-				final LocationType type;
-				if (typeStr == null)
-					type = LocationType.ANY;
-				else if ("Haltestelle".equals(typeStr))
-					type = LocationType.STATION;
-				else if ("Sonderziel".equals(typeStr))
-					type = LocationType.POI;
-				else if ("Straße Hausnummer".equals(typeStr))
-					type = LocationType.ADDRESS;
-				else
-					throw new IllegalStateException("cannot handle: '" + typeStr + "'");
-
-				final Location location = new Location(type, 0, null, name + "!");
-				if (!addresses.contains(location))
-					addresses.add(location);
-			}
-
-			if (optionsType.equals("REQ0JourneyStopsS0K"))
-				fromAddresses = addresses;
-			else if (optionsType.equals("REQ0JourneyStopsZ0K"))
-				toAddresses = addresses;
-			else if (optionsType.equals("REQ0JourneyStops1.0K"))
-				viaAddresses = addresses;
-			else
-				throw new IllegalStateException("cannot handle: '" + optionsType + "'");
-		}
-
-		if (fromAddresses != null || viaAddresses != null || toAddresses != null)
-			return new QueryConnectionsResult(new ResultHeader(SERVER_PRODUCT), fromAddresses, viaAddresses, toAddresses);
-		else
-			return queryConnections(uri, page);
-	}
-
-	@Override
-	public QueryConnectionsResult queryMoreConnections(final QueryConnectionsContext contextObj, final boolean later, final int numConnections)
-			throws IOException
-	{
-		final Context context = (Context) contextObj;
-
-		final String uri = later ? context.linkLater : context.linkEarlier;
-		if (uri == null)
-			throw new IllegalStateException("cannot query " + (later ? "later" : "earlier"));
-
-		final CharSequence page = ParserUtils.scrape(uri);
-
-		return queryConnections(uri, page);
-	}
-
-	private Location location(final String typeStr, final String idStr, final String latStr, final String lonStr, final String nameStr)
-	{
-		final int id = idStr != null ? Integer.parseInt(idStr) : 0;
-		final int lat = latStr != null ? Integer.parseInt(latStr) : 0;
-		final int lon = lonStr != null ? Integer.parseInt(lonStr) : 0;
-		final String[] placeAndName = splitPlaceAndName(nameStr);
-
-		final LocationType type;
-		if (typeStr == null)
-			type = LocationType.ANY;
-		else if ("STATION".equals(typeStr))
-			type = LocationType.STATION;
-		else if ("POI".equals(typeStr))
-			type = LocationType.POI;
-		else if ("ADDRESS".equals(typeStr) || "".equals(typeStr))
-			type = LocationType.ADDRESS;
-		else
-			throw new IllegalArgumentException("cannot handle: " + typeStr);
-
-		return new Location(type, id, lat, lon, placeAndName[0], placeAndName[1]);
-	}
-
-	private Location location(final String[] track)
-	{
-		final int id = track[4].length() > 0 ? Integer.parseInt(track[4]) : 0;
-		final int lat = Integer.parseInt(track[6]);
-		final int lon = Integer.parseInt(track[5]);
-		final String[] placeAndName = splitPlaceAndName(ParserUtils.resolveEntities(track[9]));
-		final String typeStr = track[1];
-
-		final LocationType type;
-		if ("STATION".equals(typeStr))
-			type = LocationType.STATION;
-		else if ("ADDRESS".equals(typeStr))
-			type = LocationType.ADDRESS;
-		else
-			throw new IllegalArgumentException("cannot handle: " + Arrays.toString(track));
-
-		return new Location(type, id, lat, lon, placeAndName[0], placeAndName[1]);
-	}
-
-	private static final Pattern P_CONNECTIONS_ALL_DETAILS = Pattern.compile("<a href=\"([^\"]*)\"[^>]*>Details f&uuml;r alle</a>");
-	private static final Pattern P_CONNECTIONS_HEAD = Pattern.compile(".*?" //
-			+ "<td headers=\"ivuAnfFrom\"[^>]*>\n" //
-			+ "(?:([^\n]*)\n)?" // from name
-			+ "<a href=\"/Fahrinfo/[^\"]*?MapLocation\\.X=(\\d+)&MapLocation\\.Y=(\\d+)&[^\"]*?" // from lon, lat
-			+ "MapLocation\\.type=(\\w*)&(?:MapLocation.extId=(\\d+)&)?.*?" // from type, id
-			+ "(?:<td headers=\"ivuAnfVia1\"[^>]*>\n" //
-			+ "([^\n]*)<.*?)?" // via name
-			+ "<td headers=\"ivuAnfTo\"[^>]*>\n" //
-			+ "(?:([^\n]*)\n)?" // to name
-			+ "<a href=\"/Fahrinfo/[^\"]*?MapLocation\\.X=(\\d+)&MapLocation\\.Y=(\\d+)&[^\"]*?" // to lon, lat
-			+ "MapLocation\\.type=(\\w*)&(?:MapLocation.extId=(\\d+)&)?.*?" // to type, id
-			+ "<td headers=\"ivuAnfTime\"[^>]*>.., (\\d{2}\\.\\d{2}\\.\\d{2}) \\d{1,2}:\\d{2}</td>.*?" // date
-			+ "(?:<a href=\"([^\"]*)\" title=\"fr&uuml;here Verbindungen\"[^>]*?>.*?)?" // linkEarlier
-			+ "(?:<a href=\"([^\"]*)\" title=\"sp&auml;tere Verbindungen\"[^>]*?>.*?)?" // linkLater
-	, Pattern.DOTALL);
-	private static final Pattern P_CONNECTIONS_COARSE = Pattern.compile("<form [^>]*name=\"ivuTrackListForm(\\d+)\"[^>]*>(.+?)</form>",
-			Pattern.DOTALL);
-	private static final Pattern P_CONNECTIONS_FINE = Pattern.compile(".*?" //
-			+ "Verbindungen - Detailansicht - Abfahrt: am (\\d{2}\\.\\d{2}\\.\\d{2}) um \\d{1,2}:\\d{2}.*?" // date
-			+ "guiVCtrl_connection_detailsOut_setStatus_([^_]+)_allHalts=yes.*?" // id
-			+ "<input type=\"hidden\" name=\"fitrack\" value=\"\\*([^\"]*)\" />" // track
-			+ ".*?", Pattern.DOTALL);
-	private static final Pattern P_CONNECTION_DETAILS = Pattern.compile("" //
-			+ "<td[^>]*headers=\"hafasDTL\\d+_Platform\"[^>]*>\n\\s*([^\\s\n]*?)\\s*\n</td>.*?" // departure platform
-			+ "(Fu&szlig;weg<br />.*?)?" // special walk between equivs
-			+ "(?:\nRichtung: ([^\n]*)\n.*?)?" // destination
-			+ "<td[^>]*headers=\"hafasDTL\\d+_Platform\"[^>]*>\n\\s*([^\\s\n]*?)\\s*\n</td>" // arrival platform
-	, Pattern.DOTALL);
-
-	private static final Pattern P_CHECK_CONNECTIONS_ERROR = Pattern.compile("(zu dicht beieinander|mehrfach vorhanden oder identisch)|"
-			+ "(keine geeigneten Haltestellen)|(keine Verbindung gefunden)|"
-			+ "(derzeit nur Ausk&uuml;nfte vom)|(zwischenzeitlich nicht mehr gespeichert)|(http-equiv=\"refresh\")", Pattern.CASE_INSENSITIVE);
-
-	private QueryConnectionsResult queryConnections(final String firstUri, CharSequence firstPage) throws IOException
-	{
-		final Matcher mError = P_CHECK_CONNECTIONS_ERROR.matcher(firstPage);
-		if (mError.find())
-		{
-			if (mError.group(1) != null)
-				return new QueryConnectionsResult(null, QueryConnectionsResult.Status.TOO_CLOSE);
-			if (mError.group(2) != null)
-				return new QueryConnectionsResult(null, QueryConnectionsResult.Status.UNRESOLVABLE_ADDRESS);
-			if (mError.group(3) != null)
-				return new QueryConnectionsResult(null, QueryConnectionsResult.Status.NO_CONNECTIONS);
-			if (mError.group(4) != null)
-				return new QueryConnectionsResult(null, QueryConnectionsResult.Status.INVALID_DATE);
-			if (mError.group(5) != null)
-				throw new SessionExpiredException();
-			if (mError.group(6) != null)
-				throw new UnexpectedRedirectException();
-		}
-
-		final Matcher mAllDetailsAction = P_CONNECTIONS_ALL_DETAILS.matcher(firstPage);
-		if (!mAllDetailsAction.find())
-			throw new IOException("cannot find all details link in '" + firstPage + "' on " + firstUri);
-
-		final String allDetailsUri = BASE_URL + ParserUtils.resolveEntities(mAllDetailsAction.group(1));
-		final CharSequence page = ParserUtils.scrape(allDetailsUri);
-
-		final Matcher mHead = P_CONNECTIONS_HEAD.matcher(page);
-		if (mHead.matches())
-		{
-			final Location from = mHead.group(1) != null ? location(mHead.group(4), mHead.group(5), mHead.group(3), mHead.group(2),
-					ParserUtils.resolveEntities(mHead.group(1))) : null;
-			final Location via = mHead.group(6) != null ? location(null, null, null, null, ParserUtils.resolveEntities(mHead.group(6))) : null;
-			final Location to = mHead.group(7) != null ? location(mHead.group(10), mHead.group(11), mHead.group(9), mHead.group(8),
-					ParserUtils.resolveEntities(mHead.group(7))) : null;
-			final Calendar currentDate = new GregorianCalendar(timeZone());
-			currentDate.clear();
-			ParserUtils.parseGermanDate(currentDate, mHead.group(12));
-			final String linkEarlier = mHead.group(13) != null ? BASE_URL + ParserUtils.resolveEntities(mHead.group(13)) : null;
-			final String linkLater = mHead.group(14) != null ? BASE_URL + ParserUtils.resolveEntities(mHead.group(14)) : null;
-			final List<Connection> connections = new ArrayList<Connection>();
-
-			final Matcher mConCoarse = P_CONNECTIONS_COARSE.matcher(page);
-			int iCon = 0;
-			while (mConCoarse.find())
-			{
-				if (++iCon != Integer.parseInt(mConCoarse.group(1)))
-					throw new IllegalStateException("missing connection: " + iCon);
-				final String connectionSection = mConCoarse.group(2);
-				final Matcher mConFine = P_CONNECTIONS_FINE.matcher(connectionSection);
-				if (mConFine.matches())
-				{
-					final Calendar time = new GregorianCalendar(timeZone());
-					time.clear();
-					ParserUtils.parseGermanDate(time, mConFine.group(1));
-					Date lastTime = null;
-
-					final String id = mConFine.group(2);
-
-					final String[] trackParts = mConFine.group(3).split("\\*");
-
-					final List<List<String[]>> tracks = new ArrayList<List<String[]>>();
-					for (final String trackPart : trackParts)
-					{
-						final String[] partElements = trackPart.split("\\|");
-						if (partElements.length != 10)
-							throw new IllegalStateException("cannot parse: '" + trackPart + "'");
-						final int i = Integer.parseInt(partElements[0]);
-						if (i >= tracks.size())
-							tracks.add(new ArrayList<String[]>());
-						tracks.get(i).add(partElements);
-					}
-
-					final Matcher mDetails = P_CONNECTION_DETAILS.matcher(connectionSection);
-
-					final List<Connection.Part> parts = new ArrayList<Connection.Part>(tracks.size());
-					for (int iTrack = 0; iTrack < tracks.size(); iTrack++)
-					{
-						if (!mDetails.find())
-							throw new IllegalStateException();
-
-						// FIXME ugly hack, just swallow footway to equiv station
-						if (mDetails.group(2) != null)
-							if (!mDetails.find())
-								throw new IllegalStateException();
-
-						final List<String[]> track = tracks.get(iTrack);
-						final String[] tDep = track.get(0);
-						final String[] tArr = track.get(track.size() - 1);
-
-						final Location departure = location(tDep);
-
-						final String departurePosition = !mDetails.group(1).equals("&nbsp;") ? ParserUtils.resolveEntities(mDetails.group(1)) : null;
-
-						if (tArr[2].equals("walk"))
-						{
-							ParserUtils.parseEuropeanTime(time, tDep[tDep[8].length() > 0 ? 8 : 7]);
-							if (lastTime != null && time.getTime().before(lastTime))
-								time.add(Calendar.DAY_OF_YEAR, 1);
-							lastTime = time.getTime();
-							final Date departureTime = time.getTime();
-
-							final String[] tArr2 = track.size() == 1 ? tracks.get(iTrack + 1).get(0) : tArr;
-
-							final Location arrival = location(tArr2);
-
-							ParserUtils.parseEuropeanTime(time, tArr2[tArr2[7].length() > 0 ? 7 : 8]);
-							if (lastTime != null && time.getTime().before(lastTime))
-								time.add(Calendar.DAY_OF_YEAR, 1);
-							lastTime = time.getTime();
-							final Date arrivalTime = time.getTime();
-
-							final int mins = (int) ((arrivalTime.getTime() - departureTime.getTime()) / 1000 / 60);
-
-							parts.add(new Connection.Footway(mins, departure, arrival, null));
-						}
-						else
-						{
-							ParserUtils.parseEuropeanTime(time, tDep[8]);
-							if (lastTime != null && time.getTime().before(lastTime))
-								time.add(Calendar.DAY_OF_YEAR, 1);
-							lastTime = time.getTime();
-							final Date departureTime = time.getTime();
-
-							final List<Stop> intermediateStops = new LinkedList<Stop>();
-							for (final String[] tStop : track.subList(1, track.size() - 1))
-							{
-								ParserUtils.parseEuropeanTime(time, tStop[8]);
-								if (lastTime != null && time.getTime().before(lastTime))
-									time.add(Calendar.DAY_OF_YEAR, 1);
-								lastTime = time.getTime();
-								intermediateStops.add(new Stop(location(tStop), null, time.getTime()));
-							}
-
-							final Location arrival = location(tArr);
-
-							ParserUtils.parseEuropeanTime(time, tArr[7]);
-							if (lastTime != null && time.getTime().before(lastTime))
-								time.add(Calendar.DAY_OF_YEAR, 1);
-							lastTime = time.getTime();
-							final Date arrivalTime = time.getTime();
-
-							final String arrivalPosition = !mDetails.group(4).equals("&nbsp;") ? ParserUtils.resolveEntities(mDetails.group(4))
-									: null;
-
-							final Line line = parseLineWithoutType(ParserUtils.resolveEntities(tDep[3]));
-
-							final Location destination;
-							if (mDetails.group(3) != null)
-							{
-								final String[] destinationPlaceAndName = splitPlaceAndName(ParserUtils.resolveEntities(mDetails.group(3)));
-								destination = new Location(LocationType.ANY, 0, destinationPlaceAndName[0], destinationPlaceAndName[1]);
-							}
-							else
-							{
-								// should never happen?
-								destination = null;
-							}
-
-							parts.add(new Connection.Trip(line, destination, departureTime, null, departurePosition, departure, arrivalTime, null,
-									arrivalPosition, arrival, intermediateStops, null));
-						}
-					}
-
-					connections.add(new Connection(id, firstUri, from, to, parts, null, null));
-				}
-				else
-				{
-					throw new IllegalArgumentException("cannot parse '" + mConCoarse.group(2) + "' on " + allDetailsUri);
-				}
-			}
-
-			return new QueryConnectionsResult(new ResultHeader(SERVER_PRODUCT), firstUri, from, via, to, new Context(linkLater, linkEarlier),
-					connections);
-		}
-		else
-		{
-			throw new IOException(page.toString());
-		}
-	}
-
-	@Override
-	public GetConnectionDetailsResult getConnectionDetails(final String uri) throws IOException
-	{
-		throw new UnsupportedOperationException();
-	}
-
 	private static final Pattern P_DATE_TIME = Pattern.compile("([^,]*), (.*?)");
 
 	private static final void parseDateTime(final Calendar calendar, final CharSequence str)
@@ -914,51 +501,91 @@ public final class BvgProvider extends AbstractHafasProvider
 		ParserUtils.parseEuropeanTime(calendar, m.group(2));
 	}
 
-	private static final Pattern P_LINE_REGIONAL = Pattern.compile("Zug\\s+(\\d+)");
-	private static final Pattern P_LINE_TRAM = Pattern.compile("Tram?\\s+([\\dA-Z/-]+)");
-	private static final Pattern P_LINE_BUS = Pattern.compile("Bus\\s+([\\dA-Z/-]+)");
-	private static final Pattern P_LINE_FERRY = Pattern.compile("F\\d+|WT");
-	private static final Pattern P_LINE_NUMBER = Pattern.compile("\\d{4,}");
+	private static final String AUTOCOMPLETE_URI = API_BASE + "ajax-getstop.bin/dny?tpl=suggest2json&REQ0JourneyStopsS0A=255&S=%s?&js=true&";
+
+	public List<Location> autocompleteStations(final CharSequence constraint) throws IOException
+	{
+		final String uri = String.format(AUTOCOMPLETE_URI, ParserUtils.urlEncode(constraint.toString(), ISO_8859_1));
+
+		return jsonGetStops(uri);
+	}
 
 	@Override
-	protected Line parseLineWithoutType(final String line)
+	protected boolean isValidStationId(int id)
 	{
-		if ("S41".equals(line))
-			return newLine("SS41", Attr.CIRCLE_CLOCKWISE);
-		if ("S42".equals(line))
-			return newLine("SS42", Attr.CIRCLE_ANTICLOCKWISE);
+		return id >= 1000000;
+	}
 
-		if ("Bus S41".equals(line))
-			return newLine("BS41", Attr.SERVICE_REPLACEMENT, Attr.CIRCLE_CLOCKWISE);
-		if ("Bus S42".equals(line))
-			return newLine("BS42", Attr.SERVICE_REPLACEMENT, Attr.CIRCLE_ANTICLOCKWISE);
+	@Override
+	protected void appendCustomConnectionsQueryBinaryUri(final StringBuilder uri)
+	{
+		uri.append("&h2g-direct=11");
+		if (additionalQueryParameter != null)
+			uri.append('&').append(additionalQueryParameter);
+	}
 
-		if ("Bus TXL".equals(line))
-			return newLine("BTXL", Attr.LINE_AIRPORT);
-		if ("S9".equals(line))
-			return newLine("SS9", Attr.LINE_AIRPORT);
-		if ("S45".equals(line))
-			return newLine("SS45", Attr.LINE_AIRPORT);
+	@Override
+	public QueryConnectionsResult queryConnections(final Location from, final Location via, final Location to, final Date date, final boolean dep,
+			final int maxNumConnections, final String products, final WalkSpeed walkSpeed, final Accessibility accessibility,
+			final Set<Option> options) throws IOException
+	{
+		return queryConnectionsBinary(from, via, to, date, dep, maxNumConnections, products, walkSpeed, accessibility, options);
+	}
 
-		final Matcher mRegional = P_LINE_REGIONAL.matcher(line);
-		if (mRegional.matches())
-			return newLine('R' + mRegional.group(1));
+	@Override
+	public QueryConnectionsResult queryMoreConnections(final QueryConnectionsContext contextObj, final boolean later, final int numConnections)
+			throws IOException
+	{
+		return queryMoreConnectionsBinary(contextObj, later, numConnections);
+	}
 
-		final Matcher mTram = P_LINE_TRAM.matcher(line);
+	private static final Pattern P_NORMALIZE_LINE_NAME_TRAM = Pattern.compile("(?:tra|tram)\\s+(.*)", Pattern.CASE_INSENSITIVE);
+
+	@Override
+	protected String normalizeLineName(final String lineName)
+	{
+		final Matcher mTram = P_NORMALIZE_LINE_NAME_TRAM.matcher(lineName);
 		if (mTram.matches())
-			return newLine('T' + mTram.group(1));
+			return mTram.group(1);
 
-		final Matcher mBus = P_LINE_BUS.matcher(line);
-		if (mBus.matches())
-			return newLine('B' + mBus.group(1));
+		return super.normalizeLineName(lineName);
+	}
 
-		if (P_LINE_FERRY.matcher(line).matches())
-			return newLine('F' + line);
+	@Override
+	protected Line newLine(final char product, final String normalizedName, final Attr... attrs)
+	{
+		if (product == 'S' && "S41".equals(normalizedName))
+			return super.newLine(product, normalizedName, concatAttrs(attrs, Attr.CIRCLE_CLOCKWISE));
+		if (product == 'S' && "S42".equals(normalizedName))
+			return super.newLine(product, normalizedName, concatAttrs(attrs, Attr.CIRCLE_ANTICLOCKWISE));
 
-		if (P_LINE_NUMBER.matcher(line).matches())
-			return newLine('R' + line);
+		if (product == 'B' && "S41".equals(normalizedName))
+			return super.newLine(product, normalizedName, concatAttrs(attrs, Attr.SERVICE_REPLACEMENT, Attr.CIRCLE_CLOCKWISE));
+		if (product == 'B' && "S42".equals(normalizedName))
+			return super.newLine(product, normalizedName, concatAttrs(attrs, Attr.SERVICE_REPLACEMENT, Attr.CIRCLE_ANTICLOCKWISE));
 
-		return super.parseLineWithoutType(line);
+		if (product == 'B' && "TXL".equals(normalizedName))
+			return super.newLine(product, normalizedName, concatAttrs(attrs, Attr.LINE_AIRPORT));
+		if (product == 'S' && "S9".equals(normalizedName))
+			return super.newLine(product, normalizedName, concatAttrs(attrs, Attr.LINE_AIRPORT));
+		if (product == 'S' && "S45".equals(normalizedName))
+			return super.newLine(product, normalizedName, concatAttrs(attrs, Attr.LINE_AIRPORT));
+
+		return super.newLine(product, normalizedName, attrs);
+	}
+
+	private Attr[] concatAttrs(final Attr[] attrs1, final Attr... attrs2)
+	{
+		final int attrs1length = attrs1.length;
+		final int attrs2length = attrs2.length;
+
+		final Attr[] newAttrs = new Attr[attrs1length + attrs2length];
+		for (int i = 0; i < attrs1length; i++)
+			newAttrs[i] = attrs1[i];
+		for (int i = 0; i < attrs2length; i++)
+			newAttrs[attrs1length + i] = attrs2[i];
+
+		return newAttrs;
 	}
 
 	@Override
@@ -968,6 +595,11 @@ public final class BvgProvider extends AbstractHafasProvider
 
 		if ("AUSFL".equals(ucType)) // Umgebung Berlin
 			return 'R';
+
+		if ("F".equals(ucType))
+			return 'F';
+		if ("WT".equals(ucType)) // Wassertaxi
+			return 'F';
 
 		final char t = super.normalizeType(type);
 		if (t != 0)

@@ -18,6 +18,7 @@
 package de.schildbach.pte;
 
 import java.util.Date;
+import java.util.Set;
 
 import de.schildbach.pte.dto.Location;
 
@@ -40,7 +41,7 @@ public class VgnProvider extends AbstractEfaProvider
 		return NETWORK_ID;
 	}
 
-	public boolean hasCapabilities(Capability... capabilities)
+	public boolean hasCapabilities(final Capability... capabilities)
 	{
 		for (final Capability capability : capabilities)
 			if (capability == Capability.AUTOCOMPLETE_ONE_LINE || capability == Capability.DEPARTURES || capability == Capability.CONNECTIONS)
@@ -51,8 +52,9 @@ public class VgnProvider extends AbstractEfaProvider
 
 	@Override
 	protected String xsltTripRequest2Uri(final Location from, final Location via, final Location to, final Date date, final boolean dep,
-			final int numConnections, final String products, final WalkSpeed walkSpeed, final Accessibility accessibility)
+			final int numConnections, final String products, final WalkSpeed walkSpeed, final Accessibility accessibility, final Set<Option> options)
 	{
-		return super.xsltTripRequest2Uri(from, via, to, date, dep, numConnections, products, walkSpeed, accessibility) + "&itdLPxx_showTariffLevel=1";
+		return super.xsltTripRequest2Uri(from, via, to, date, dep, numConnections, products, walkSpeed, accessibility, options)
+				+ "&itdLPxx_showTariffLevel=1";
 	}
 }

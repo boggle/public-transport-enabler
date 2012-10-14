@@ -17,6 +17,9 @@
 
 package de.schildbach.pte.live;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import java.util.Date;
 import java.util.List;
 
@@ -29,6 +32,7 @@ import de.schildbach.pte.dto.Location;
 import de.schildbach.pte.dto.LocationType;
 import de.schildbach.pte.dto.NearbyStationsResult;
 import de.schildbach.pte.dto.QueryConnectionsResult;
+import de.schildbach.pte.dto.QueryDeparturesResult;
 
 /**
  * @author Andreas Schildbach
@@ -57,6 +61,14 @@ public class BsvagProviderLiveTest extends AbstractProviderLiveTest
 	}
 
 	@Test
+	public void queryDepartures() throws Exception
+	{
+		final QueryDeparturesResult result = provider.queryDepartures(26000256, 0, false);
+
+		print(result);
+	}
+
+	@Test
 	public void autocompleteIncomplete() throws Exception
 	{
 		final List<Location> autocompletes = provider.autocompleteStations("Kurf");
@@ -79,7 +91,25 @@ public class BsvagProviderLiveTest extends AbstractProviderLiveTest
 				new Location(LocationType.STATION, 26000322, null, "Packhof"), new Date(), true, ALL_PRODUCTS, WalkSpeed.NORMAL,
 				Accessibility.NEUTRAL);
 		System.out.println(result);
+		assertEquals(QueryConnectionsResult.Status.OK, result.status);
+		assertTrue(result.connections.size() > 0);
+
+		if (!result.context.canQueryLater())
+			return;
+
 		final QueryConnectionsResult laterResult = queryMoreConnections(result.context, true);
 		System.out.println(laterResult);
+
+		if (!laterResult.context.canQueryLater())
+			return;
+
+		final QueryConnectionsResult later2Result = queryMoreConnections(laterResult.context, true);
+		System.out.println(later2Result);
+
+		if (!later2Result.context.canQueryEarlier())
+			return;
+
+		final QueryConnectionsResult earlierResult = queryMoreConnections(later2Result.context, false);
+		System.out.println(earlierResult);
 	}
 }

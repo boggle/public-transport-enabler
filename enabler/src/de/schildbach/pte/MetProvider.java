@@ -36,6 +36,8 @@ public class MetProvider extends AbstractEfaProvider
 	public MetProvider()
 	{
 		super(API_BASE, null);
+
+		setUseRouteIndexAsConnectionId(false);
 	}
 
 	public NetworkId id()
@@ -49,7 +51,7 @@ public class MetProvider extends AbstractEfaProvider
 		return TimeZone.getTimeZone("Australia/Melbourne");
 	}
 
-	public boolean hasCapabilities(Capability... capabilities)
+	public boolean hasCapabilities(final Capability... capabilities)
 	{
 		for (final Capability capability : capabilities)
 			if (capability == Capability.AUTOCOMPLETE_ONE_LINE || capability == Capability.DEPARTURES || capability == Capability.CONNECTIONS)

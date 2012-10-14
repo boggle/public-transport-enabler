@@ -17,18 +17,19 @@
 
 package de.schildbach.pte.util;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.OutputStream;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
-import java.io.Writer;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.Charset;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -45,13 +46,15 @@ import de.schildbach.pte.exception.UnexpectedRedirectException;
  */
 public final class ParserUtils
 {
-	private static final String SCRAPE_USER_AGENT = "Mozilla/5.0 (Windows NT 5.1; rv:2.0) Gecko/20100101 Firefox/4.0";
+	private static final String SCRAPE_USER_AGENT = "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:13.0) Gecko/20100101 Firefox/13.0";
 	private static final String SCRAPE_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 	private static final int SCRAPE_INITIAL_CAPACITY = 4096;
 	private static final int SCRAPE_CONNECT_TIMEOUT = 5000;
 	private static final int SCRAPE_READ_TIMEOUT = 15000;
-	private static final String SCRAPE_DEFAULT_ENCODING = "ISO-8859-1";
+	private static final Charset SCRAPE_DEFAULT_ENCODING = Charset.forName("ISO-8859-1");
 	private static final int SCRAPE_PAGE_EMPTY_THRESHOLD = 2;
+	private static final Pattern P_REFRESH = Pattern.compile("<META\\s+http-equiv=\"refresh\"\\s+content=\"\\d+;\\s*URL=([^\"]+)\"\\s*/>",
+			Pattern.CASE_INSENSITIVE);
 
 	private static String stateCookie;
 
@@ -62,17 +65,17 @@ public final class ParserUtils
 
 	public static final CharSequence scrape(final String url) throws IOException
 	{
-		return scrape(url, false, null, null, null);
+		return scrape(url, null, null, null);
 	}
 
-	public static final CharSequence scrape(final String url, final boolean isPost, final String request, String encoding,
-			final String sessionCookieName) throws IOException
+	public static final CharSequence scrape(final String url, final String postRequest, Charset encoding, final String sessionCookieName)
+			throws IOException
 	{
-		return scrape(url, isPost, request, encoding, sessionCookieName, 3);
+		return scrape(url, postRequest, encoding, sessionCookieName, 3);
 	}
 
-	public static final CharSequence scrape(final String urlStr, final boolean isPost, final String request, String encoding,
-			final String sessionCookieName, int tries) throws IOException
+	public static final CharSequence scrape(final String urlStr, final String postRequest, Charset encoding, final String sessionCookieName, int tries)
+			throws IOException
 	{
 		if (encoding == null)
 			encoding = SCRAPE_DEFAULT_ENCODING;
@@ -86,61 +89,111 @@ public final class ParserUtils
 				final HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
 				connection.setDoInput(true);
-				connection.setDoOutput(request != null);
+				connection.setDoOutput(postRequest != null);
 				connection.setConnectTimeout(SCRAPE_CONNECT_TIMEOUT);
 				connection.setReadTimeout(SCRAPE_READ_TIMEOUT);
 				connection.addRequestProperty("User-Agent", SCRAPE_USER_AGENT);
 				connection.addRequestProperty("Accept", SCRAPE_ACCEPT);
+				connection.addRequestProperty("Accept-Encoding", "gzip");
 				// workaround to disable Vodafone compression
 				connection.addRequestProperty("Cache-Control", "no-cache");
 
 				if (sessionCookieName != null && stateCookie != null)
 					connection.addRequestProperty("Cookie", stateCookie);
 
-				if (request != null)
+				if (postRequest != null)
 				{
-					if (isPost)
-					{
-						connection.setRequestMethod("POST");
-						connection.addRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-						connection.addRequestProperty("Content-Length", Integer.toString(request.length()));
-					}
+					final byte[] postRequestBytes = postRequest.getBytes(encoding.name());
 
-					final Writer writer = new OutputStreamWriter(connection.getOutputStream(), encoding);
-					writer.write(request);
-					writer.close();
+					connection.setRequestMethod("POST");
+					connection.addRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+					connection.addRequestProperty("Content-Length", Integer.toString(postRequestBytes.length));
+
+					final OutputStream os = connection.getOutputStream();
+					os.write(postRequestBytes);
+					os.close();
 				}
 
-				final Reader pageReader = new InputStreamReader(connection.getInputStream(), encoding);
-				if (!url.equals(connection.getURL()))
-					throw new UnexpectedRedirectException(url, connection.getURL());
-				copy(pageReader, buffer);
-				pageReader.close();
-
-				if (buffer.length() > SCRAPE_PAGE_EMPTY_THRESHOLD)
+				final int responseCode = connection.getResponseCode();
+				if (responseCode == HttpURLConnection.HTTP_OK)
 				{
-					if (sessionCookieName != null)
+					final String contentType = connection.getContentType();
+					final String contentEncoding = connection.getContentEncoding();
+					if (!url.getHost().equals(connection.getURL().getHost()))
+						throw new UnexpectedRedirectException(url, connection.getURL());
+
+					final InputStream is;
+					if ("gzip".equalsIgnoreCase(contentEncoding) || "application/octet-stream".equalsIgnoreCase(contentType))
 					{
-						for (final Map.Entry<String, List<String>> entry : connection.getHeaderFields().entrySet())
+						final BufferedInputStream bis = new BufferedInputStream(connection.getInputStream());
+						bis.mark(2);
+						final int byte0 = bis.read();
+						final int byte1 = bis.read();
+						bis.reset();
+
+						// check for gzip header
+						if (byte0 == 0x1f && byte1 == 0x8b)
 						{
-							if ("set-cookie".equalsIgnoreCase(entry.getKey()))
+							// gzipped
+							is = new GZIPInputStream(bis);
+						}
+						else
+						{
+							// uncompressed
+							is = bis;
+						}
+					}
+					else
+					{
+						// uncompressed
+						is = connection.getInputStream();
+					}
+
+					final Reader pageReader = new InputStreamReader(is, encoding);
+					copy(pageReader, buffer);
+					pageReader.close();
+
+					if (buffer.length() > SCRAPE_PAGE_EMPTY_THRESHOLD)
+					{
+						final Matcher mRefresh = P_REFRESH.matcher(buffer);
+						if (!mRefresh.find())
+						{
+							if (sessionCookieName != null)
 							{
-								for (final String value : entry.getValue())
+								for (final Map.Entry<String, List<String>> entry : connection.getHeaderFields().entrySet())
 								{
-									if (value.startsWith(sessionCookieName))
+									if ("set-cookie".equalsIgnoreCase(entry.getKey()))
 									{
-										stateCookie = value.split(";", 2)[0];
+										for (final String value : entry.getValue())
+										{
+											if (value.startsWith(sessionCookieName))
+											{
+												stateCookie = value.split(";", 2)[0];
+											}
+										}
 									}
 								}
 							}
+
+							return buffer;
+						}
+						else
+						{
+							throw new UnexpectedRedirectException(url, new URL(mRefresh.group(1)));
 						}
 					}
-
-					return buffer;
+					else
+					{
+						final String message = "got empty page (length: " + buffer.length() + ")";
+						if (tries-- > 0)
+							System.out.println(message + ", retrying...");
+						else
+							throw new IOException(message + ": " + url);
+					}
 				}
 				else
 				{
-					final String message = "got empty page (length: " + buffer.length() + ")";
+					final String message = "got response: " + responseCode + " " + connection.getResponseMessage();
 					if (tries-- > 0)
 						System.out.println(message + ", retrying...");
 					else
@@ -172,12 +225,15 @@ public final class ParserUtils
 
 	public static final InputStream scrapeInputStream(final String url) throws IOException
 	{
-		return scrapeInputStream(url, null, null, 3);
+		return scrapeInputStream(url, null, null, null, null, 3);
 	}
 
-	public static final InputStream scrapeInputStream(final String urlStr, final String postRequest, final String sessionCookieName, int tries)
-			throws IOException
+	public static final InputStream scrapeInputStream(final String urlStr, final String postRequest, Charset requestEncoding, final String referer,
+			final String sessionCookieName, int tries) throws IOException
 	{
+		if (requestEncoding == null)
+			requestEncoding = SCRAPE_DEFAULT_ENCODING;
+
 		while (true)
 		{
 			final URL url = new URL(urlStr);
@@ -192,26 +248,32 @@ public final class ParserUtils
 			// workaround to disable Vodafone compression
 			connection.addRequestProperty("Cache-Control", "no-cache");
 
+			if (referer != null)
+				connection.addRequestProperty("Referer", referer);
+
 			if (sessionCookieName != null && stateCookie != null)
 				connection.addRequestProperty("Cookie", stateCookie);
 
 			if (postRequest != null)
 			{
+				final byte[] postRequestBytes = postRequest.getBytes(requestEncoding.name());
+
 				connection.setRequestMethod("POST");
 				connection.addRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-				connection.addRequestProperty("Content-Length", Integer.toString(postRequest.length()));
+				connection.addRequestProperty("Content-Length", Integer.toString(postRequestBytes.length));
 
-				final Writer writer = new OutputStreamWriter(connection.getOutputStream(), SCRAPE_DEFAULT_ENCODING);
-				writer.write(postRequest);
-				writer.close();
+				final OutputStream os = connection.getOutputStream();
+				os.write(postRequestBytes);
+				os.close();
 			}
 
 			final int responseCode = connection.getResponseCode();
 			if (responseCode == HttpURLConnection.HTTP_OK)
 			{
+				final String contentType = connection.getContentType();
 				final String contentEncoding = connection.getContentEncoding();
 				final InputStream is = connection.getInputStream();
-				if (!url.equals(connection.getURL()))
+				if (!url.getHost().equals(connection.getURL().getHost()))
 					throw new UnexpectedRedirectException(url, connection.getURL());
 
 				if (sessionCookieName != null)
@@ -231,10 +293,48 @@ public final class ParserUtils
 					}
 				}
 
-				if ("gzip".equalsIgnoreCase(contentEncoding))
-					return new GZIPInputStream(is);
+				if ("gzip".equalsIgnoreCase(contentEncoding) || "application/octet-stream".equalsIgnoreCase(contentType))
+				{
+					final BufferedInputStream bis = new BufferedInputStream(is);
+					bis.mark(2);
+					final int byte0 = bis.read();
+					final int byte1 = bis.read();
+					bis.reset();
 
-				return is;
+					// check for gzip header
+					if (byte0 == 0x1f && byte1 == 0x8b)
+					{
+						final InputStream gis = new GZIPInputStream(bis);
+
+						final BufferedInputStream bis2 = new BufferedInputStream(gis);
+						bis2.mark(2);
+						final int byte0_2 = bis2.read();
+						final int byte1_2 = bis2.read();
+						bis2.reset();
+
+						// check for gzip header again
+						if (byte0_2 == 0x1f && byte1_2 == 0x8b)
+						{
+							// double gzipped
+							return new GZIPInputStream(bis2);
+						}
+						else
+						{
+							// gzipped
+							return bis2;
+						}
+					}
+					else
+					{
+						// uncompressed
+						return bis;
+					}
+				}
+				else
+				{
+					// uncompressed
+					return is;
+				}
 			}
 			else
 			{
@@ -278,8 +378,7 @@ public final class ParserUtils
 				else if (namedEntity.equals("apos"))
 					c = '\'';
 				else if (namedEntity.equals("szlig"))
-                    // TODO unicode szlig literal as char goes here; took out to avoid mac encoding problems
-					c = 'b';
+					c = '\u00df';
 				else if (namedEntity.equals("nbsp"))
 					c = ' ';
 				else
@@ -294,16 +393,30 @@ public final class ParserUtils
 	}
 
 	private static final Pattern P_ISO_DATE = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})");
+	private static final Pattern P_ISO_DATE_REVERSE = Pattern.compile("(\\d{2})-(\\d{2})-(\\d{4})");
 
 	public static final void parseIsoDate(final Calendar calendar, final CharSequence str)
 	{
-		final Matcher m = P_ISO_DATE.matcher(str);
-		if (!m.matches())
-			throw new RuntimeException("cannot parse: '" + str + "'");
+		final Matcher mIso = P_ISO_DATE.matcher(str);
+		if (mIso.matches())
+		{
+			calendar.set(Calendar.YEAR, Integer.parseInt(mIso.group(1)));
+			calendar.set(Calendar.MONTH, Integer.parseInt(mIso.group(2)) - 1);
+			calendar.set(Calendar.DAY_OF_MONTH, Integer.parseInt(mIso.group(3)));
+			return;
+		}
 
-		calendar.set(Calendar.YEAR, Integer.parseInt(m.group(1)));
-		calendar.set(Calendar.MONTH, Integer.parseInt(m.group(2)) - 1);
-		calendar.set(Calendar.DAY_OF_MONTH, Integer.parseInt(m.group(3)));
+		final Matcher mIsoReverse = P_ISO_DATE_REVERSE.matcher(str);
+		if (mIsoReverse.matches())
+		{
+			calendar.set(Calendar.YEAR, Integer.parseInt(mIsoReverse.group(3)));
+			calendar.set(Calendar.MONTH, Integer.parseInt(mIsoReverse.group(2)) - 1);
+			calendar.set(Calendar.DAY_OF_MONTH, Integer.parseInt(mIsoReverse.group(1)));
+			return;
+		}
+
+		throw new RuntimeException("cannot parse: '" + str + "'");
+
 	}
 
 	private static final Pattern P_GERMAN_DATE = Pattern.compile("(\\d{2})[\\./-](\\d{2})[\\./-](\\d{2,4})");
@@ -421,11 +534,11 @@ public final class ParserUtils
 		}
 	}
 
-	public static String urlEncode(final String str, final String enc)
+	public static String urlEncode(final String str, final Charset encoding)
 	{
 		try
 		{
-			return URLEncoder.encode(str, enc);
+			return URLEncoder.encode(str, encoding.name());
 		}
 		catch (final UnsupportedEncodingException x)
 		{
@@ -433,11 +546,11 @@ public final class ParserUtils
 		}
 	}
 
-	public static String urlDecode(final String str, final String enc)
+	public static String urlDecode(final String str, final Charset encoding)
 	{
 		try
 		{
-			return URLDecoder.decode(str, enc);
+			return URLDecoder.decode(str, encoding.name());
 		}
 		catch (final UnsupportedEncodingException x)
 		{

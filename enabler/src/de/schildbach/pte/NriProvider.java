@@ -20,7 +20,6 @@ package de.schildbach.pte;
 import java.io.IOException;
 import java.util.List;
 
-import de.schildbach.pte.dto.Line;
 import de.schildbach.pte.dto.Location;
 import de.schildbach.pte.dto.LocationType;
 import de.schildbach.pte.dto.NearbyStationsResult;
@@ -45,13 +44,36 @@ public class NriProvider extends AbstractHafasProvider
 		return NETWORK_ID;
 	}
 
-	public boolean hasCapabilities(Capability... capabilities)
+	public boolean hasCapabilities(final Capability... capabilities)
 	{
 		for (final Capability capability : capabilities)
 			if (capability == Capability.AUTOCOMPLETE_ONE_LINE || capability == Capability.DEPARTURES || capability == Capability.CONNECTIONS)
 				return true;
 
 		return false;
+	}
+
+	@Override
+	protected char intToProduct(final int value)
+	{
+		if (value == 1) // Air
+			return 'I';
+		if (value == 2)
+			return 'R';
+		if (value == 4)
+			return 'B';
+		if (value == 8)
+			return 'T';
+		if (value == 16)
+			return 'U';
+		if (value == 32)
+			return 'F';
+		if (value == 64)
+			return 'F';
+		if (value == 128)
+			return 'F';
+
+		throw new IllegalArgumentException("cannot handle: " + value);
 	}
 
 	@Override
@@ -156,19 +178,12 @@ public class NriProvider extends AbstractHafasProvider
 
 	private static final String AUTOCOMPLETE_URI = API_BASE
 			+ "ajax-getstop.exe/ony?start=1&tpl=suggest2json&REQ0JourneyStopsS0A=255&REQ0JourneyStopsS0B=5&REQ0JourneyStopsB=12&getstop=1&noSession=yes&REQ0JourneyStopsS0G=%s?&js=true&";
-	private static final String ENCODING = "ISO-8859-1";
 
 	public List<Location> autocompleteStations(final CharSequence constraint) throws IOException
 	{
-		final String uri = String.format(AUTOCOMPLETE_URI, ParserUtils.urlEncode(constraint.toString(), ENCODING));
+		final String uri = String.format(AUTOCOMPLETE_URI, ParserUtils.urlEncode(constraint.toString(), ISO_8859_1));
 
 		return jsonGetStops(uri);
-	}
-
-	@Override
-	protected Line parseLineAndType(final String line)
-	{
-		return parseLineWithoutType(line);
 	}
 
 	@Override

@@ -9,6 +9,12 @@
 	<name>enabler</name>
 	<version>1.0-SNAPSHOT</version>
 
+	<parent>
+		<groupId>de.schildbach.pte</groupId>
+		<artifactId>base</artifactId>
+		<version>1</version>
+	</parent>
+
 	<repositories>
 		<repository>
 			<id>googlecode-ksoap2-android</id>
@@ -88,6 +94,15 @@
 				<configuration>
 					<source>1.5</source>
 					<target>1.5</target>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<excludes>
+						<exclude>de/schildbach/pte/live/**</exclude>
+					</excludes>
 				</configuration>
 			</plugin>
 		</plugins>

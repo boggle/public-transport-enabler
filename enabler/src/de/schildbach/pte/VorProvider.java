@@ -17,6 +17,11 @@
 
 package de.schildbach.pte;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import de.schildbach.pte.dto.Style;
+
 /**
  * @author Andreas Schildbach
  */
@@ -28,6 +33,8 @@ public class VorProvider extends AbstractEfaProvider
 	public VorProvider()
 	{
 		super(API_BASE, null);
+
+		setReferer("http://www.wienerlinien.at/eportal/");
 	}
 
 	public NetworkId id()
@@ -35,7 +42,7 @@ public class VorProvider extends AbstractEfaProvider
 		return NETWORK_ID;
 	}
 
-	public boolean hasCapabilities(Capability... capabilities)
+	public boolean hasCapabilities(final Capability... capabilities)
 	{
 		for (final Capability capability : capabilities)
 			if (capability == Capability.AUTOCOMPLETE_ONE_LINE || capability == Capability.DEPARTURES || capability == Capability.CONNECTIONS)
@@ -43,4 +50,27 @@ public class VorProvider extends AbstractEfaProvider
 
 		return false;
 	}
+
+	private static final Map<String, Style> LINES = new HashMap<String, Style>();
+
+	static
+	{
+		// Wien
+		LINES.put("UU1", new Style(Style.Shape.RECT, Style.parseColor("#c6292a"), Style.WHITE));
+		LINES.put("UU2", new Style(Style.Shape.RECT, Style.parseColor("#a82783"), Style.WHITE));
+		LINES.put("UU3", new Style(Style.Shape.RECT, Style.parseColor("#f39315"), Style.WHITE));
+		LINES.put("UU4", new Style(Style.Shape.RECT, Style.parseColor("#23a740"), Style.WHITE));
+		LINES.put("UU6", new Style(Style.Shape.RECT, Style.parseColor("#be762c"), Style.WHITE));
+	}
+
+	@Override
+	public Style lineStyle(final String line)
+	{
+		final Style style = LINES.get(line);
+		if (style != null)
+			return style;
+		else
+			return super.lineStyle(line);
+	}
+
 }

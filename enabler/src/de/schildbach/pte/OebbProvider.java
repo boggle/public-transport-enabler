@@ -18,13 +18,15 @@
 package de.schildbach.pte;
 
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.Date;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 import de.schildbach.pte.dto.Location;
 import de.schildbach.pte.dto.LocationType;
 import de.schildbach.pte.dto.NearbyStationsResult;
+import de.schildbach.pte.dto.QueryConnectionsContext;
+import de.schildbach.pte.dto.QueryConnectionsResult;
 import de.schildbach.pte.dto.QueryDeparturesResult;
 import de.schildbach.pte.util.ParserUtils;
 
@@ -35,11 +37,12 @@ public class OebbProvider extends AbstractHafasProvider
 {
 	public static final NetworkId NETWORK_ID = NetworkId.OEBB;
 	private static final String API_BASE = "http://fahrplan.oebb.at/bin/";
-	private static final String URL_ENCODING = "ISO-8859-1";
 
 	public OebbProvider()
 	{
-		super(API_BASE + "query.exe/dn", 12, null);
+		super(API_BASE + "query.exe/dn", 13, null);
+
+		setDominantPlanStopTime(true);
 	}
 
 	public NetworkId id()
@@ -84,6 +87,8 @@ public class OebbProvider extends AbstractHafasProvider
 			return 'I';
 		if (value == 2048)
 			return 'P';
+		if (value == 4096)
+			return 'I';
 
 		throw new IllegalArgumentException("cannot handle: " + value);
 	}
@@ -97,6 +102,7 @@ public class OebbProvider extends AbstractHafasProvider
 			productBits.setCharAt(1, '1'); // ÖBB EC/ÖBB IC
 			productBits.setCharAt(2, '1'); // EC/IC
 			productBits.setCharAt(10, '1'); // Autoreisezug
+			productBits.setCharAt(12, '1'); // westbahn
 		}
 		else if (product == 'R')
 		{
@@ -186,17 +192,30 @@ public class OebbProvider extends AbstractHafasProvider
 
 	public List<Location> autocompleteStations(final CharSequence constraint) throws IOException
 	{
-		final String uri = String.format(AUTOCOMPLETE_URI, ParserUtils.urlEncode(constraint.toString(), URL_ENCODING));
+		final String uri = String.format(AUTOCOMPLETE_URI, ParserUtils.urlEncode(constraint.toString(), ISO_8859_1));
 
 		return jsonGetStops(uri);
 	}
 
-	private static final Map<WalkSpeed, String> WALKSPEED_MAP = new HashMap<WalkSpeed, String>();
-	static
+	@Override
+	protected void appendCustomConnectionsQueryBinaryUri(final StringBuilder uri)
 	{
-		WALKSPEED_MAP.put(WalkSpeed.SLOW, "115");
-		WALKSPEED_MAP.put(WalkSpeed.NORMAL, "100");
-		WALKSPEED_MAP.put(WalkSpeed.FAST, "85");
+		uri.append("&h2g-direct=11");
+	}
+
+	@Override
+	public QueryConnectionsResult queryConnections(final Location from, final Location via, final Location to, final Date date, final boolean dep,
+			final int maxNumConnections, final String products, final WalkSpeed walkSpeed, final Accessibility accessibility,
+			final Set<Option> options) throws IOException
+	{
+		return queryConnectionsBinary(from, via, to, date, dep, maxNumConnections, products, walkSpeed, accessibility, options);
+	}
+
+	@Override
+	public QueryConnectionsResult queryMoreConnections(final QueryConnectionsContext contextObj, final boolean later, final int numConnections)
+			throws IOException
+	{
+		return queryMoreConnectionsBinary(contextObj, later, numConnections);
 	}
 
 	@Override
@@ -239,8 +258,6 @@ public class OebbProvider extends AbstractHafasProvider
 
 		if (ucType.equals("LKB")) // Connections only?
 			return 'T';
-		// if (ucType.equals("WLB")) // via JSON API
-		// return 'T';
 
 		if (ucType.equals("OBU")) // Connections only?
 			return 'B';
@@ -249,6 +266,8 @@ public class OebbProvider extends AbstractHafasProvider
 		if (ucType.equals("BSV")) // Deutschland, Connections only?
 			return 'B';
 		if (ucType.equals("O-BUS")) // Stadtbus
+			return 'B';
+		if (ucType.equals("O")) // Stadtbus
 			return 'B';
 
 		if (ucType.equals("SCH")) // Connections only?

@@ -49,14 +49,11 @@ public class ConnectionController
 			@RequestParam(value = "toType", required = false, defaultValue = "ANY") final LocationType toType,
 			@RequestParam(value = "to", required = false) final String to,
 			@RequestParam(value = "toId", required = false, defaultValue = "0") final int toId,
-            @RequestParam(value = "num", required = false, defaultValue = "5") final int num) throws IOException
+            @RequestParam(value = "num", required = false, defaultValue = "4") final int num) throws IOException
 	{
 		final Location fromLocation = new Location(fromType, fromId, null, from);
-        final Location midLocation = null;
 		final Location toLocation = new Location(toType, toId, null, to);
 		final String products = "IRSUTBFC";
-        final Date date = new Date();
-        final boolean flag = true;
-		return provider.queryConnections(fromLocation, midLocation, toLocation, date, flag, num, products, WalkSpeed.NORMAL, Accessibility.NEUTRAL);
+		return provider.queryConnections(fromLocation, null, toLocation, new Date(), true, num, products, WalkSpeed.NORMAL, Accessibility.NEUTRAL, null);
 	}
 }

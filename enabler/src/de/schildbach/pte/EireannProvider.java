@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2012 the original author or authors.
+ * Copyright 2012 the original author or authors.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,10 @@ package de.schildbach.pte;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import de.schildbach.pte.dto.Line;
 import de.schildbach.pte.dto.Location;
 import de.schildbach.pte.dto.LocationType;
 import de.schildbach.pte.dto.NearbyStationsResult;
@@ -27,16 +30,18 @@ import de.schildbach.pte.dto.QueryDeparturesResult;
 import de.schildbach.pte.util.ParserUtils;
 
 /**
+ * Ireland, Dublin
+ * 
  * @author Andreas Schildbach
  */
-public class SncbProvider extends AbstractHafasProvider
+public class EireannProvider extends AbstractHafasProvider
 {
-	public static final NetworkId NETWORK_ID = NetworkId.SNCB;
-	private static final String API_BASE = "http://www.belgianrail.be/jp/sncb-nmbs-routeplanner/"; // http://hari.b-rail.be/hafas/bin/
+	public static final NetworkId NETWORK_ID = NetworkId.EIREANN;
+	private static final String API_BASE = "http://buseireann.fahrinfo.ivu.de/Fahrinfo/bin/";
 
-	public SncbProvider()
+	public EireannProvider()
 	{
-		super(API_BASE + "query.exe/nn", 16, null);
+		super(API_BASE + "query.bin/en", 4, null);
 	}
 
 	public NetworkId id()
@@ -58,26 +63,30 @@ public class SncbProvider extends AbstractHafasProvider
 	{
 		if (product == 'I')
 		{
-			productBits.setCharAt(0, '1'); // Hochgeschwindigkeitszug
-			productBits.setCharAt(2, '1'); // IC/IR/P/ICT
 		}
-		else if (product == 'R' || product == 'S')
+		else if (product == 'R')
 		{
-			productBits.setCharAt(6, '1'); // Zug
+		}
+		else if (product == 'S')
+		{
 		}
 		else if (product == 'U')
 		{
-			productBits.setCharAt(8, '1'); // Metro
 		}
 		else if (product == 'T')
 		{
-			productBits.setCharAt(10, '1'); // Stadtbahn
 		}
-		else if (product == 'B' || product == 'P')
+		else if (product == 'B')
 		{
-			productBits.setCharAt(9, '1'); // Bus
+			productBits.setCharAt(3, '1');
 		}
-		else if (product == 'F' || product == 'C')
+		else if (product == 'P')
+		{
+		}
+		else if (product == 'F')
+		{
+		}
+		else if (product == 'C')
 		{
 		}
 		else
@@ -86,29 +95,32 @@ public class SncbProvider extends AbstractHafasProvider
 		}
 	}
 
-	private static final String[] PLACES = { "Antwerpen", "Gent", "Charleroi", "Liege", "Liège", "Brussel" };
-
-	@Override
-	protected String[] splitPlaceAndName(final String name)
-	{
-		for (final String place : PLACES)
-			if (name.startsWith(place + " ") || name.startsWith(place + "-"))
-				return new String[] { place, name.substring(place.length() + 1) };
-
-		return super.splitPlaceAndName(name);
-	}
-
 	public NearbyStationsResult queryNearbyStations(final Location location, final int maxDistance, final int maxStations) throws IOException
 	{
 		final StringBuilder uri = new StringBuilder(API_BASE);
 
-		if (location.type == LocationType.STATION && location.hasId())
+		if (location.hasLocation())
 		{
-			uri.append("stboard.exe/nn?near=Zoek");
-			uri.append("&distance=").append(maxDistance != 0 ? maxDistance / 1000 : 50);
-			uri.append("&input=").append(location.id);
+			uri.append("query.bin/eny");
+			uri.append("?performLocating=2&tpl=stop2json");
+			uri.append("&look_maxno=").append(maxStations != 0 ? maxStations : 200);
+			uri.append("&look_maxdist=").append(maxDistance != 0 ? maxDistance : 5000);
+			uri.append("&look_stopclass=").append(allProductsInt());
+			uri.append("&look_x=").append(location.lon);
+			uri.append("&look_y=").append(location.lat);
 
-			return htmlNearbyStations(uri.toString());
+			return jsonNearbyStations(uri.toString());
+		}
+		else if (location.type == LocationType.STATION && location.hasId())
+		{
+			uri.append("stboard.bin/en");
+			uri.append("?productsFilter=").append(allProductsString());
+			uri.append("&boardType=dep");
+			uri.append("&input=").append(location.id);
+			uri.append("&sTI=1&start=yes&hcount=0");
+			uri.append("&L=vs_java3");
+
+			return xmlNearbyStations(uri.toString());
 		}
 		else
 		{
@@ -119,7 +131,7 @@ public class SncbProvider extends AbstractHafasProvider
 	public QueryDeparturesResult queryDepartures(final int stationId, final int maxDepartures, final boolean equivs) throws IOException
 	{
 		final StringBuilder uri = new StringBuilder();
-		uri.append(API_BASE).append("stboard.exe/nn");
+		uri.append(API_BASE).append("stboard.bin/en");
 		uri.append("?productsFilter=").append(allProductsString());
 		uri.append("&boardType=dep");
 		uri.append("&disableEquivs=yes"); // don't use nearby stations
@@ -131,8 +143,7 @@ public class SncbProvider extends AbstractHafasProvider
 		return xmlQueryDepartures(uri.toString(), stationId);
 	}
 
-	private static final String AUTOCOMPLETE_URI = API_BASE
-			+ "ajax-getstop.exe/nny?start=1&tpl=suggest2json&REQ0JourneyStopsS0A=255&REQ0JourneyStopsB=12&S=%s?&js=true&";
+	private static final String AUTOCOMPLETE_URI = API_BASE + "ajax-getstop.bin/en?getstop=1&REQ0JourneyStopsS0A=255&S=%s?&js=true&";
 
 	public List<Location> autocompleteStations(final CharSequence constraint) throws IOException
 	{
@@ -141,32 +152,27 @@ public class SncbProvider extends AbstractHafasProvider
 		return jsonGetStops(uri);
 	}
 
+	private static final Pattern P_NORMALIZE_LINE = Pattern.compile("([^#]+)#");
+
+	@Override
+	protected Line parseLineAndType(final String lineAndType)
+	{
+		final Matcher mLine = P_NORMALIZE_LINE.matcher(lineAndType);
+		if (mLine.matches())
+			return newLine('B', mLine.group(1));
+
+		return super.parseLineAndType(lineAndType);
+	}
+
 	@Override
 	protected char normalizeType(final String type)
 	{
 		final String ucType = type.toUpperCase();
 
-		if (ucType.startsWith("IC "))
-			return 'I';
-		if ("THALYS".equals(ucType))
-			return 'I';
-
-		if (ucType.startsWith("IR "))
-			return 'R';
-		if ("L".equals(ucType))
-			return 'R';
-		if ("CR".equals(ucType))
-			return 'R';
-
-		if ("MÉTRO".equals(ucType))
-			return 'U';
-
-		if ("TRAMWAY".equals(ucType))
-			return 'T';
-
-		final char t = super.normalizeType(type);
-		if (t != 0)
-			return t;
+		if ("COA".equals(ucType))
+			return 'B';
+		if ("CIT".equals(ucType))
+			return 'B';
 
 		return 0;
 	}

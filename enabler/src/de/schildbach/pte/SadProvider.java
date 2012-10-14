@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 
 import org.ksoap2.SoapEnvelope;
@@ -27,7 +28,6 @@ import de.schildbach.pte.dto.Connection.Part;
 import de.schildbach.pte.dto.Connection.Trip;
 import de.schildbach.pte.dto.Fare;
 import de.schildbach.pte.dto.Fare.Type;
-import de.schildbach.pte.dto.GetConnectionDetailsResult;
 import de.schildbach.pte.dto.Line;
 import de.schildbach.pte.dto.Location;
 import de.schildbach.pte.dto.LocationType;
@@ -122,7 +122,7 @@ public class SadProvider extends AbstractNetworkProvider {
 	}
 	
 	public QueryConnectionsResult queryConnections(Location from, Location via, Location to, Date date, boolean dep, final int numConnections, String products,
-			WalkSpeed walkSpeed, Accessibility accessibility) throws IOException {
+			WalkSpeed walkSpeed, Accessibility accessibility, Set<Option> options) throws IOException {
 
 		// Select correct SOAP method depending on the dep flag
 		final String soapMethod = dep ? "searchCollPartenza" : "searchCollArrivo";
@@ -221,12 +221,7 @@ public class SadProvider extends AbstractNetworkProvider {
 		// Query for connections with new date/time value
 		// NOTE: via, products, walkSpeed, accessibility are set to null
 		return queryConnections(new Location(LocationType.STATION, fromId), null, new Location(LocationType.STATION, toId), date, dep,
-				0, null, null, null);
-	}
-
-	public GetConnectionDetailsResult getConnectionDetails(String connectionUri) throws IOException {
-		// Not supported by SOAP API
-		throw new UnsupportedOperationException();
+				0, null, null, null, null);
 	}
 
 	protected TimeZone timeZone() {
@@ -421,7 +416,7 @@ public class SadProvider extends AbstractNetworkProvider {
 						// Add footway to parts list
 						if (isFootway) {
 							// NOTE: path is set to null
-							parts.add(new Footway(Integer.parseInt(tratto.getPropertyAsString("durata").split(":")[1]),
+							parts.add(new Footway(Integer.parseInt(tratto.getPropertyAsString("durata").split(":")[1]), 0, false,
 									soapToLocation((SoapObject) tratto.getProperty("nodo_partenza")), soapToLocation((SoapObject) tratto
 											.getProperty("nodo_arrivo")), null));
 						}
@@ -438,8 +433,8 @@ public class SadProvider extends AbstractNetworkProvider {
 								// predictedDepartureTime, departurePosition,
 								// predictedArrivalTime, arrivalPosition,
 								// intermediateStops, path
-								parts.add(new Trip(new Line(lineId, lineId, DEFAULT_STYLE), null, responseDate.get(0), null, null,
-										soapToLocation((SoapObject) tratto.getProperty("nodo_partenza")), responseDate.get(1), null, null,
+								parts.add(new Trip(new Line(lineId, lineId, DEFAULT_STYLE), null, responseDate.get(0), null, null, null,
+										soapToLocation((SoapObject) tratto.getProperty("nodo_partenza")), responseDate.get(1), null, null, null,
 										soapToLocation((SoapObject) tratto.getProperty("nodo_arrivo")), null, null));
 							} catch (ParseException e) {
 								e.printStackTrace();
@@ -468,8 +463,8 @@ public class SadProvider extends AbstractNetworkProvider {
 				// Only add to connections list if exactly one to and and one from location were found
 				if (fromToLocs.size() == 2) {
 					// NOTE: link, capacity set to null
-					connections.add(new Connection(fromToLocs.get(0).toString() + fromToLocs.get(1).toString(), null, fromToLocs.get(0),
-							fromToLocs.get(1), parts, fares, null));
+					connections.add(new Connection(fromToLocs.get(0).toString() + fromToLocs.get(1).toString(), fromToLocs.get(0),
+							fromToLocs.get(1), parts, fares, null, null));
 				}
 			}
 		}

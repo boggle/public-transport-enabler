@@ -18,13 +18,15 @@
 package de.schildbach.pte;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.List;
-import java.util.regex.Pattern;
+import java.util.Set;
 
-import de.schildbach.pte.dto.Line;
 import de.schildbach.pte.dto.Location;
 import de.schildbach.pte.dto.LocationType;
 import de.schildbach.pte.dto.NearbyStationsResult;
+import de.schildbach.pte.dto.QueryConnectionsContext;
+import de.schildbach.pte.dto.QueryConnectionsResult;
 import de.schildbach.pte.dto.QueryDeparturesResult;
 
 /**
@@ -52,6 +54,29 @@ public class NasaProvider extends AbstractHafasProvider
 				return true;
 
 		return false;
+	}
+
+	@Override
+	protected char intToProduct(final int value)
+	{
+		if (value == 1)
+			return 'I';
+		if (value == 2)
+			return 'I';
+		if (value == 4)
+			return 'R';
+		if (value == 8)
+			return 'R';
+		if (value == 16)
+			return 'S';
+		if (value == 32)
+			return 'T';
+		if (value == 64)
+			return 'B';
+		if (value == 128) // Rufbus
+			return 'P';
+
+		throw new IllegalArgumentException("cannot handle: " + value);
 	}
 
 	@Override
@@ -143,21 +168,25 @@ public class NasaProvider extends AbstractHafasProvider
 		return xmlMLcReq(constraint);
 	}
 
-	private static final Pattern P_LINE_NUMBER = Pattern.compile("\\d{4,}");
-
 	@Override
-	protected Line parseLineWithoutType(final String line)
+	protected void appendCustomConnectionsQueryBinaryUri(final StringBuilder uri)
 	{
-		if (P_LINE_NUMBER.matcher(line).matches())
-			return newLine('?' + line);
-
-		return super.parseLineWithoutType(line);
+		uri.append("&h2g-direct=11");
 	}
 
 	@Override
-	protected Line parseLineAndType(final String line)
+	public QueryConnectionsResult queryConnections(final Location from, final Location via, final Location to, final Date date, final boolean dep,
+			final int maxNumConnections, final String products, final WalkSpeed walkSpeed, final Accessibility accessibility,
+			final Set<Option> options) throws IOException
 	{
-		return parseLineWithoutType(line);
+		return queryConnectionsBinary(from, via, to, date, dep, maxNumConnections, products, walkSpeed, accessibility, options);
+	}
+
+	@Override
+	public QueryConnectionsResult queryMoreConnections(final QueryConnectionsContext contextObj, final boolean later, final int numConnections)
+			throws IOException
+	{
+		return queryMoreConnectionsBinary(contextObj, later, numConnections);
 	}
 
 	@Override
@@ -168,6 +197,8 @@ public class NasaProvider extends AbstractHafasProvider
 		if ("ECW".equals(ucType))
 			return 'I';
 		if ("IXB".equals(ucType)) // ICE International
+			return 'I';
+		if ("RRT".equals(ucType))
 			return 'I';
 
 		if ("DPF".equals(ucType)) // mit Dampflok bespannter Zug

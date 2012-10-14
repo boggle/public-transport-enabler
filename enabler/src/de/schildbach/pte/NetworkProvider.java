@@ -20,8 +20,8 @@ package de.schildbach.pte;
 import java.io.IOException;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 
-import de.schildbach.pte.dto.GetConnectionDetailsResult;
 import de.schildbach.pte.dto.Location;
 import de.schildbach.pte.dto.NearbyStationsResult;
 import de.schildbach.pte.dto.Point;
@@ -59,9 +59,14 @@ public interface NetworkProvider
 		NEUTRAL, LIMITED, BARRIER_FREE
 	}
 
+	public enum Option
+	{
+		BIKE
+	}
+
 	NetworkId id();
 
-	boolean hasCapabilities(Capability... capabilities);
+	boolean hasCapabilities(final Capability... capabilities);
 
 	/**
 	 * Determine stations near to given location. At least one of stationId or lat/lon pair must be present.
@@ -122,11 +127,13 @@ public interface NetworkProvider
 	 *            how fast can you walk?
 	 * @param accessibility
 	 *            how accessible do you need the route to be?
+	 * @param options
+	 *            additional options
 	 * @return result object that can contain alternatives to clear up ambiguousnesses, or contains possible connections
 	 * @throws IOException
 	 */
 	QueryConnectionsResult queryConnections(Location from, Location via, Location to, Date date, boolean dep, int numConnections, String products,
-			WalkSpeed walkSpeed, Accessibility accessibility) throws IOException;
+			WalkSpeed walkSpeed, Accessibility accessibility, Set<Option> options) throws IOException;
 
 	/**
 	 * Query more connections (e.g. earlier or later)
@@ -141,16 +148,6 @@ public interface NetworkProvider
 	 * @throws IOException
 	 */
 	QueryConnectionsResult queryMoreConnections(QueryConnectionsContext context, boolean later, int numConnections) throws IOException;
-
-	/**
-	 * Get details about a connection
-	 * 
-	 * @param connectionUri
-	 *            uri returned via {@link NetworkProvider#queryConnections}
-	 * @return result object containing the details of the connection
-	 * @throws IOException
-	 */
-	GetConnectionDetailsResult getConnectionDetails(String connectionUri) throws IOException;
 
 	/**
 	 * Get style of line
