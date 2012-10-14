@@ -20,6 +20,8 @@ package de.schildbach.pte.service;
 import java.io.IOException;
 import java.util.List;
 
+import de.schildbach.pte.BahnProvider;
+import de.schildbach.pte.NetworkProvider;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -37,7 +39,7 @@ import de.schildbach.pte.dto.NearbyStationsResult;
 @Controller
 public class LocationController
 {
-	private final RtProvider provider = new RtProvider();
+	private final NetworkProvider provider = new BahnProvider();
 
 	@RequestMapping(value = "/location/suggest", method = RequestMethod.GET)
 	@ResponseBody

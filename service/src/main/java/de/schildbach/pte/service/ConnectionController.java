@@ -20,6 +20,8 @@ package de.schildbach.pte.service;
 import java.io.IOException;
 import java.util.Date;
 
+import de.schildbach.pte.BahnProvider;
+import de.schildbach.pte.NetworkProvider;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -39,7 +41,7 @@ import de.schildbach.pte.dto.QueryConnectionsResult;
 @Controller
 public class ConnectionController
 {
-	private final RtProvider provider = new RtProvider();
+	private final NetworkProvider provider = new BahnProvider();
 
 	@RequestMapping(value = "/connection", method = RequestMethod.GET)
 	@ResponseBody
